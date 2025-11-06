@@ -1,2 +1,1 @@
-# blitz-commerce-app
-ecommerce application for testing Blitz Protocol
+## Blitz-commerce-app
