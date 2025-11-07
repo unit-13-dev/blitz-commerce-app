@@ -1180,14 +1180,12 @@ async function getModuleConfig(userId: string, intentType: string) {
 - A business owns exactly one workflow (`workflows` table enforces `UNIQUE (business_id)` in migration `20251107121000_workflow_constraints.sql`).
 - The canvas always boots with three non-removable core nodes:
   - **GenAI Intent Layer** – cannot be deleted, contains OpenAI model configuration.
-  - **Router / Orchestrator** – cannot be deleted, mediates calls into modules and receives their results.
-  - **Response Formatter** – optional clean-up node that modules can connect to if they need to format payloads before hitting the UI.
+  - **Router / Orchestrator** – cannot be deleted, mediates calls into modules and receives their results via a single connection port that all modules share.
+  - **Response Formatter** – optional clean-up node that modules can connect to if they need to format payloads before hitting the UI. Modules emitting `MODULE_TO_FRONTEND` payloads wire into this node; it feeds back into the router which in turn delivers the UI instruction to the client.
 - Additional modules (Order Tracking, Cancellation, FAQ, Refund) are added via a floating “+ Add Module” button (top-right). Each module can exist only once; once dropped, it disappears from the modal.
 - Connections are **manual**. Designers decide which edges exist (e.g., Router ↔ Tracking, Cancellation ↔ Refund). Selecting an edge and pressing Delete/Backspace removes that connection.
-- The router now exposes a **single right-side port**; every module connects to that endpoint. The router’s panel still tracks intent mappings (TRACK_SHIPMENT, CANCEL_ORDER, FAQ_SUPPORT) so multiple modules can coexist, but visually all wires route through that single handle.
-- When modules need to send structured UI payloads (e.g., `MODULE_TO_FRONTEND` telling the UI to render a radiobutton prompt), they can wire their output to the **Response Formatter** node. That node stays downstream, shapes the payload, and hands it back to the router (which delivers it to the client). Modules that prefer `GENAI_TO_FRONTEND` can instead route back to the router directly and rely on GenAI formatting.
 - GenAI and Router nodes are marked `deletable: false` inside React Flow; if users attempt to delete them the canvas immediately restores the node.
-- Every node/edge change (add/remove/reposition, module config edit) triggers an immediate POST to `/api/workflows`, ensuring Supabase always has the canonical workflow.
+- Every node/edge change (add/remove/reposition, module config edit) triggers an immediate POST to `/api/workflows`, ensuring Supabase always has the canonical workflow snapshot.
 - Module deletion is supported through the config panel’s “Remove module” button or Delete/Backspace on a selected module node.
 
 ```tsx
@@ -1247,10 +1245,10 @@ export function WorkflowCanvas({ workflowId, initialNodes, initialEdges }: Workf
       edges={edges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onNodesDelete={onNodesDelete}
-      nodeTypes={nodeTypes}
+      onNodesDelete={handleModuleDeletion}
       connectionMode={ConnectionMode.Loose}
       deleteKeyCode={['Backspace', 'Delete']}
+      isValidConnection={validateConnection}
     >
       <Background />
       <Controls />
@@ -1260,6 +1258,50 @@ export function WorkflowCanvas({ workflowId, initialNodes, initialEdges }: Workf
     <NodeAddModal ... />
     <NodeConfigPanel ... />
   );
+}
+```
+
+### **Workflow API (`/api/workflows`)**
+
+- **Authentication**: Both GET and POST require a signed-in Clerk session. `auth()` aborts with 401 if unauthenticated.
+- **Auto-provisioning**: `ensureBusinessForUser(user)` guarantees a business + user row exists in Supabase. If the user is new, the helper inserts a placeholder business and links the Clerk account.
+- **GET**
+  - Returns `{ business, workflows }`, where `workflows` is an array (max length 1) containing the persisted `react_flow_state` (nodes & edges) for that business.
+  - The canvas hydrates itself using this snapshot.
+- **POST**
+  - Expects `{ workflowId?, nodes, edges, name?, description? }`.
+  - Validates array payloads and hands off to `saveWorkflow`, which upserts the row for the current business.
+  - Response: `{ workflow }` reflecting the saved row.
+  - Used by the canvas for auto-save after every user action.
+
+```ts
+// app/api/workflows/route.ts (excerpt)
+export async function GET() {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const clerk = await clerkClient();
+  const user = await clerk.users.getUser(userId);
+  const { business } = await ensureBusinessForUser(user);
+  const workflows = await listWorkflowsForBusiness(business.id);
+  return NextResponse.json({ business, workflows });
+}
+
+export async function POST(request: Request) {
+  const payload = await request.json().catch(() => null);
+  if (!payload || !Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) {
+    return NextResponse.json({ error: 'Invalid payload. Expected nodes and edges arrays.' }, { status: 400 });
+  }
+
+  const workflow = await saveWorkflow({
+    workflowId: payload.workflowId,
+    businessId: business.id,
+    name: payload.name,
+    description: payload.description,
+    nodes: payload.nodes,
+    edges: payload.edges,
+  });
+  return NextResponse.json({ workflow }, { status: 200 });
 }
 ```
 
