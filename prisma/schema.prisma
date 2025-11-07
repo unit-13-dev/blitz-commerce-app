@@ -1,0 +1,450 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  vendor
+  admin
+}
+
+enum OrderStatus {
+  pending
+  paid
+  processing
+  shipped
+  delivered
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+}
+
+enum AddressType {
+  home
+  office
+  other
+}
+
+enum PostPrivacy {
+  public
+  following
+  draft
+}
+
+enum PostStatus {
+  published
+  draft
+}
+
+enum KycStatus {
+  pending
+  approved
+  rejected
+}
+
+model Profile {
+  id        String   @id
+  email     String   @unique
+  fullName  String?
+  role      UserRole @default(user)
+  avatarUrl String?
+  bio       String?
+  website   String?
+  location  String?
+  passwordHash String? @map("password_hash")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products         Product[]      @relation("VendorProducts")
+  cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
+  orders           Order[]
+  orderAddresses   UserAddress[]
+  groupsCreated    Group[]        @relation("GroupCreator")
+  groupMemberships GroupMember[]
+  posts            Post[]
+  postLikes        PostLike[]
+  postComments     PostComment[]
+  commentLikes     CommentLike[]
+  follows          Follow[]       @relation("Following")
+  followers        Follow[]       @relation("Followers")
+  vendorKycs       VendorKyc[]
+  drafts           Draft[]
+
+  @@map("profiles")
+}
+
+model Product {
+  id                String   @id @default(uuid())
+  vendorId          String
+  vendor            Profile  @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  price             Decimal  @db.Decimal(10, 2)
+  imageUrl          String?
+  category          String?
+  stockQuantity     Int      @default(0)
+  isActive          Boolean  @default(true)
+  groupOrderEnabled Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  images        ProductImage[]
+  discountTiers ProductDiscountTier[]
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+  orderItems    OrderItem[]
+  groups        Group[]                  @relation("ProductGroups")
+  tags          PostTaggedProduct[]
+  categories    ProductCategoryMapping[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl     String
+  displayOrder Int      @default(0)
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("product_images")
+}
+
+model ProductDiscountTier {
+  id                 String   @id @default(uuid())
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tierNumber         Int
+  membersRequired    Int
+  discountPercentage Float
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([productId, tierNumber])
+  @@map("product_discount_tiers")
+}
+
+model Group {
+  id              String    @id @default(uuid())
+  creatorId       String
+  creator         Profile   @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product   @relation("ProductGroups", fields: [productId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  isPrivate       Boolean   @default(false)
+  memberLimit     Int       @default(0)
+  accessCode      String?
+  codeGeneratedAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  members GroupMember[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  group Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  user    Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlist")
+}
+
+model UserAddress {
+  id           String      @id @default(uuid())
+  userId       String
+  addressType  AddressType
+  fullName     String
+  phoneNumber  String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String      @default("India")
+  isDefault    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("user_addresses")
+}
+
+model Order {
+  id                  String        @id @default(uuid())
+  userId              String
+  orderNumber         String        @unique
+  totalAmount         Decimal       @db.Decimal(10, 2)
+  shippingAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  status              OrderStatus   @default(pending)
+  shippingAddressId   String?
+  shippingAddressText String
+  paymentMethod       String        @default("online")
+  paymentStatus       PaymentStatus @default(pending)
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  user            Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shippingAddress UserAddress? @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String
+  productId       String
+  productName     String
+  productImageUrl String?
+  quantity        Int
+  unitPrice       Decimal  @db.Decimal(10, 2)
+  totalPrice      Decimal  @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+model Post {
+  id        String      @id @default(uuid())
+  userId    String
+  content   String
+  privacy   PostPrivacy @default(public)
+  status    PostStatus  @default(published)
+  rating    Float?
+  createdAt DateTime    @default(now())
+
+  user        Profile             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images      PostImage[]
+  tags        PostTagMapping[]
+  taggedItems PostTaggedProduct[]
+  likes       PostLike[]
+  comments    PostComment[]
+
+  @@map("posts")
+}
+
+model PostImage {
+  id           String   @id @default(uuid())
+  postId       String
+  imageUrl     String
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("post_images")
+}
+
+model PostTag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  mappings PostTagMapping[]
+
+  @@map("post_tags")
+}
+
+model PostTagMapping {
+  id        String   @id @default(uuid())
+  postId    String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  post Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  PostTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, tagId])
+  @@map("post_tag_mappings")
+}
+
+model PostTaggedProduct {
+  id        String   @id @default(uuid())
+  postId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, productId])
+  @@map("post_tagged_products")
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+model ProductCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  mappings ProductCategoryMapping[]
+
+  @@map("product_categories")
+}
+
+model ProductCategoryMapping {
+  id         String   @id @default(uuid())
+  productId  String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, categoryId])
+  @@map("product_category_mappings")
+}
+
+model Draft {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String?
+  feeling   String?
+  privacy   String   @default("public")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("drafts")
+}
+
+model VendorKyc {
+  id                         String    @id @default(uuid())
+  vendorId                   String
+  businessName               String
+  displayBusinessName        String?
+  businessType               String?
+  businessRegistrationNumber String?
+  businessAddress            String?
+  contactEmail               String?
+  contactPhone               String?
+  hoAddress                  String
+  warehouseAddress           String
+  phoneNumber                String
+  gstNumber                  String
+  gstUrl                     String
+  panNumber                  String
+  panUrl                     String
+  tanNumber                  String
+  turnoverOver5cr            Boolean
+  status                     KycStatus @default(pending)
+  rejectionReason            String?
+  submittedAt                DateTime  @default(now())
+  reviewedAt                 DateTime?
+  reviewedBy                 String?
+  version                    Int       @default(1)
+  isActive                   Boolean   @default(true)
+  previousKycId              String?
+  submissionCount            Int       @default(1)
+
+  vendor Profile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_kyc")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  Profile @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following Profile @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("user_follows")
+}
+
+model PostComment {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post  Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user  Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes CommentLike[]
+
+  @@map("post_comments")
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment PostComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@map("comment_likes")
+}
