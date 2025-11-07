@@ -46,7 +46,7 @@ export function ModuleNode(props: NodeProps) {
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-gradient-to-br ${colors.bg} text-white min-w-[200px] ${
+      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br ${colors.bg} text-white min-w-[200px] ${
         selected ? `ring-2 ${colors.border} ring-offset-2` : ''
       }`}
     >
@@ -63,7 +63,7 @@ export function ModuleNode(props: NodeProps) {
         type="target"
         position={Position.Top}
         id="module-input"
-        className="!bg-white !w-3 !h-3"
+        className="bg-white w-3 h-3"
         style={{ top: -6 }}
       />
       
@@ -94,7 +94,7 @@ export function ModuleNode(props: NodeProps) {
         type="source"
         position={Position.Bottom}
         id="module-output"
-        className="!bg-white !w-3 !h-3"
+        className="bg-white w-3 h-3"
         style={{ bottom: -6 }}
       />
     </div>

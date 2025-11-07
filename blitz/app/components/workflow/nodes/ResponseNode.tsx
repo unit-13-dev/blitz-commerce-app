@@ -10,7 +10,7 @@ export function ResponseNode(props: NodeProps) {
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-gradient-to-br from-gray-600 to-gray-800 text-white min-w-[200px] ${
+      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-gray-600 to-gray-800 text-white min-w-[200px] ${
         selected ? 'ring-2 ring-gray-300 ring-offset-2' : ''
       }`}
     >
@@ -24,7 +24,7 @@ export function ResponseNode(props: NodeProps) {
         type="target"
         position={Position.Top}
         id="response-input"
-        className="!bg-gray-300 !w-3 !h-3"
+        className="bg-gray-300 w-3 h-3"
         style={{ top: -6 }}
       />
       

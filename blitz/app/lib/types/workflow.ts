@@ -31,7 +31,7 @@ export interface APIConfig {
 export interface ModuleConfig {
   moduleType: ModuleType;
   apiConfigs: Record<string, APIConfig>;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
 }
 
 export interface GenAIConfig {
@@ -60,7 +60,7 @@ export interface NodeData extends Record<string, unknown> {
   
   // Response Node
   responseType?: 'text' | 'structured' | 'ui-component';
-  responseConfig?: Record<string, any>;
+  responseConfig?: Record<string, unknown>;
   
   // Common
   description?: string;

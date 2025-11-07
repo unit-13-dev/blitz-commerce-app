@@ -19,7 +19,7 @@ export function RouterNode(props: NodeProps) {
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 text-white min-w-[220px] ${
+      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-blue-500 to-cyan-600 text-white min-w-[220px] ${
         selected ? 'ring-2 ring-blue-300 ring-offset-2' : ''
       }`}
     >
@@ -37,7 +37,7 @@ export function RouterNode(props: NodeProps) {
         type="target"
         position={Position.Top}
         id="intent-input"
-        className="!bg-blue-300 !w-3 !h-3"
+        className="bg-blue-300 w-3 h-3"
         style={{ top: -6 }}
       />
       
@@ -61,7 +61,7 @@ export function RouterNode(props: NodeProps) {
                 type="source"
                 position={Position.Right}
                 id={handleId}
-                className="!bg-cyan-300 !w-2.5 !h-2.5"
+                className="bg-cyan-300 w-2.5 h-2.5"
                 style={{ 
                   right: -5,
                   top: `${20 + index * 28}px`

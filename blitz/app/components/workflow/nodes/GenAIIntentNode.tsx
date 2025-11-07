@@ -8,7 +8,7 @@ export function GenAIIntentNode(props: NodeProps) {
   const selected = props.selected;
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white min-w-[200px] ${
+      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-purple-500 to-indigo-600 text-white min-w-[200px] ${
         selected ? 'ring-2 ring-purple-300 ring-offset-2' : ''
       }`}
     >
@@ -41,7 +41,7 @@ export function GenAIIntentNode(props: NodeProps) {
         type="source"
         position={Position.Bottom}
         id="intent-output"
-        className="!bg-purple-300 !w-3 !h-3"
+        className="bg-purple-300 w-3 h-3"
         style={{ bottom: -6 }}
       />
     </div>

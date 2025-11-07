@@ -1,0 +1,13 @@
+# Supabase CLI configuration for the blitz app directory
+# Keep only supported keys
+
+project_id = "dputyvzhsfnaqvgrdarj"
+
+[api]
+schemas = ["public"]
+
+[db]
+port = 54322
+
+[studio]
+port = 54323

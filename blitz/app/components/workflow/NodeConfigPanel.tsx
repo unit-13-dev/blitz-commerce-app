@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Node } from '@xyflow/react';
 import { NodeData, APIConfig, ModuleType, IntentType } from '@/app/lib/types/workflow';
 
@@ -11,37 +11,38 @@ interface NodeConfigPanelProps {
   onClose: () => void;
 }
 
+const panelClass =
+  'w-80 overflow-y-auto border-l border-gray-200 bg-white p-5 text-slate-900';
+const headingClass = 'text-lg font-semibold text-slate-900';
+const labelClass = 'mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500';
+const inputClass =
+  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-gray-400 focus:border-slate-900 focus:outline-none focus:ring-0 transition';
+const buttonPrimaryClass =
+  'w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-black';
+const buttonSecondaryClass = 'text-slate-600 transition hover:text-slate-900';
+
 export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<NodeData>(node.data);
-
-  useEffect(() => {
-    setConfig(node.data);
-  }, [node]);
+  const [newApiName, setNewApiName] = useState('');
 
   const handleSave = () => {
     onUpdate(node.id, { ...config, isConfigured: true });
     onClose();
   };
 
-  // GenAI Intent Node Configuration
   if (node.type === 'genai-intent') {
     return (
-      <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800">GenAI Intent Configuration</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+      <div className={panelClass}>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className={headingClass}>GenAI Intent Configuration</h2>
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
             ✕
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5 text-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Model
-            </label>
+            <label className={labelClass}>Model</label>
             <select
               value={config.genAIConfig?.model || 'gpt-4'}
               onChange={(e) =>
@@ -50,7 +51,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                   genAIConfig: { ...config.genAIConfig, model: e.target.value },
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className={inputClass}
             >
               <option value="gpt-4">GPT-4</option>
               <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -59,9 +60,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Temperature (0-1)
-            </label>
+            <label className={labelClass}>Temperature (0-1)</label>
             <input
               type="number"
               min="0"
@@ -77,14 +76,12 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                   },
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className={inputClass}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              System Prompt
-            </label>
+            <label className={labelClass}>System Prompt</label>
             <textarea
               value={config.genAIConfig?.systemPrompt || ''}
               onChange={(e) =>
@@ -97,15 +94,12 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                 })
               }
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className={`${inputClass} min-h-[120px]`}
               placeholder="You are an intent classifier for an e-commerce chatbot..."
             />
           </div>
 
-          <button
-            onClick={handleSave}
-            className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          >
+          <button onClick={handleSave} className={buttonPrimaryClass}>
             Save Configuration
           </button>
         </div>
@@ -113,40 +107,59 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
     );
   }
 
-  // Router Node Configuration
   if (node.type === 'router') {
     const intentMappings: Record<IntentType, string> = (config.routerConfig?.intentMappings || {}) as Record<IntentType, string>;
 
     return (
-      <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800">Router Configuration</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+      <div className={panelClass}>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className={headingClass}>Router Configuration</h2>
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
             ✕
           </button>
         </div>
 
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Map each intent to a module node. Select from available modules below.
+        <div className="space-y-5 text-sm">
+          <p className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+            Map each intent to the module that should receive it. Add module nodes to the canvas to see them here.
           </p>
 
-          {(['TRACK_SHIPMENT', 'CANCEL_ORDER', 'REQUEST_REFUND', 'MODIFY_ORDER', 'GENERIC_QUERY'] as IntentType[]).map(
-            (intent) => {
-              const availableModules = allNodes.filter(n => n.type === 'module');
-              const currentMapping = intentMappings[intent] || '';
-              
-              return (
-                <div key={intent}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {intent.replace('_', ' ')}
-                  </label>
-                  {availableModules.length > 0 ? (
-                    <select
-                      value={currentMapping}
+          {(['TRACK_SHIPMENT', 'CANCEL_ORDER', 'REQUEST_REFUND', 'MODIFY_ORDER', 'GENERIC_QUERY'] as IntentType[]).map((intent) => {
+            const availableModules = allNodes.filter((n) => n.type === 'module');
+            const currentMapping = intentMappings[intent] || '';
+
+            return (
+              <div key={intent} className="space-y-2">
+                <label className={labelClass}>{intent.replace('_', ' ')}</label>
+                {availableModules.length > 0 ? (
+                  <select
+                    value={currentMapping}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        routerConfig: {
+                          ...config.routerConfig,
+                          intentMappings: {
+                            ...intentMappings,
+                            [intent]: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">Select module...</option>
+                    {availableModules.map((module) => (
+                      <option key={module.id} value={module.id}>
+                        {(module.data.label || module.data.moduleType || module.id) as string}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={intentMappings[intent] || ''}
                       onChange={(e) =>
                         setConfig({
                           ...config,
@@ -159,56 +172,19 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                           },
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="">Select module...</option>
-                      {availableModules.map((module) => (
-                        <option key={module.id} value={module.id}>
-                          {(module.data.label || module.data.moduleType || module.id) as string}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        value={intentMappings[intent] || ''}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            routerConfig: {
-                              ...config.routerConfig,
-                              intentMappings: {
-                                ...intentMappings,
-                                [intent]: e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        placeholder="Enter module node ID"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        No modules found. Add module nodes first, then configure routing.
-                      </p>
-                    </>
-                  )}
-                </div>
-              );
-            }
-          )}
+                      placeholder="Enter module node ID"
+                      className={inputClass}
+                    />
+                    <p className="text-xs text-slate-400">
+                      No module nodes detected. Add a module node and reconnect it to the router.
+                    </p>
+                  </>
+                )}
+              </div>
+            );
+          })}
 
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs text-blue-800">
-              <strong>Tip:</strong> You can find module node IDs by clicking on module nodes. 
-              The ID is shown in the node or you can inspect the workflow structure.
-            </p>
-          </div>
-
-          <button
-            onClick={handleSave}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
+          <button onClick={handleSave} className={buttonPrimaryClass}>
             Save Configuration
           </button>
         </div>
@@ -216,34 +192,32 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
     );
   }
 
-  // Module Node Configuration
   if (node.type === 'module') {
     const moduleType = config.moduleType || 'tracking';
     const apiConfigs = config.moduleConfig?.apiConfigs || {};
-    const [newApiName, setNewApiName] = useState('');
-    const [editingApi, setEditingApi] = useState<string | null>(null);
 
     const addAPI = () => {
-      if (newApiName.trim()) {
-        const updatedConfigs = {
-          ...apiConfigs,
-          [newApiName]: {
-            name: newApiName,
-            baseUrl: '',
-            method: 'GET' as const,
-          },
-        };
-        setConfig({
-          ...config,
-          moduleConfig: {
-            ...config.moduleConfig,
-            moduleType,
-            apiConfigs: updatedConfigs,
-          },
-        });
-        setEditingApi(newApiName);
-        setNewApiName('');
-      }
+      const trimmed = newApiName.trim();
+      if (!trimmed) return;
+
+      const updatedConfigs = {
+        ...apiConfigs,
+        [trimmed]: {
+          name: trimmed,
+          baseUrl: '',
+          method: 'GET' as const,
+        },
+      };
+
+      setConfig({
+        ...config,
+        moduleConfig: {
+          ...config.moduleConfig,
+          moduleType,
+          apiConfigs: updatedConfigs,
+        },
+      });
+      setNewApiName('');
     };
 
     const updateAPI = (apiName: string, updates: Partial<APIConfig>) => {
@@ -251,6 +225,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
         ...apiConfigs,
         [apiName]: { ...apiConfigs[apiName], ...updates },
       };
+
       setConfig({
         ...config,
         moduleConfig: {
@@ -264,6 +239,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
     const deleteAPI = (apiName: string) => {
       const updatedConfigs = { ...apiConfigs };
       delete updatedConfigs[apiName];
+
       setConfig({
         ...config,
         moduleConfig: {
@@ -274,7 +250,6 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
       });
     };
 
-    // Get required APIs based on module type
     const getRequiredAPIs = (type: ModuleType): string[] => {
       switch (type) {
         case 'tracking':
@@ -293,93 +268,76 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
     const requiredAPIs = getRequiredAPIs(moduleType);
 
     return (
-      <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800">
-            {config.label || moduleType} Configuration
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+      <div className={panelClass}>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className={headingClass}>{config.label || 'Module Configuration'}</h2>
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
             ✕
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5 text-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Module Label
-            </label>
+            <label className={labelClass}>Module Label</label>
             <input
               type="text"
               value={config.label || ''}
               onChange={(e) => setConfig({ ...config, label: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="Custom module name"
+              placeholder={moduleType.replace('-', ' ')}
+              className={inputClass}
             />
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Required APIs
             </h3>
-            <ul className="text-xs text-gray-600 space-y-1 mb-3">
-              {requiredAPIs.map((api) => (
-                <li key={api} className="flex items-center gap-2">
-                  <span className={apiConfigs[api] ? 'text-green-600' : 'text-red-600'}>
-                    {apiConfigs[api] ? '✓' : '○'}
-                  </span>
-                  {api}
-                </li>
-              ))}
+            <ul className="mt-2 space-y-1 text-xs text-slate-300">
+              {requiredAPIs.map((api) => {
+                const configured = Boolean(apiConfigs[api]);
+                return (
+                  <li key={api} className="flex items-center gap-2">
+                    <span className={configured ? 'text-emerald-400' : 'text-slate-600'}>
+                      {configured ? '●' : '○'}
+                    </span>
+                    {api}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">
-              API Configurations
-            </h3>
-
+          <div className="space-y-4">
             {Object.entries(apiConfigs).map(([apiName, apiConfig]) => (
-              <div
-                key={apiName}
-                className="mb-3 p-3 border border-gray-200 rounded-lg"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm text-gray-800">{apiName}</span>
+              <div key={apiName} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 shadow">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-white">{apiName}</span>
                   <button
                     onClick={() => deleteAPI(apiName)}
-                    className="text-red-500 hover:text-red-700 text-xs"
+                    className="text-xs text-rose-400 transition hover:text-rose-300"
                   >
                     Delete
                   </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Base URL</label>
+                    <label className={labelClass}>Base URL</label>
                     <input
                       type="text"
                       value={apiConfig.baseUrl}
-                      onChange={(e) =>
-                        updateAPI(apiName, { baseUrl: e.target.value })
-                      }
+                      onChange={(e) => updateAPI(apiName, { baseUrl: e.target.value })}
                       placeholder="https://api.example.com"
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      className={inputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Method</label>
+                    <label className={labelClass}>Method</label>
                     <select
                       value={apiConfig.method || 'GET'}
-                      onChange={(e) =>
-                        updateAPI(apiName, {
-                          method: e.target.value as APIConfig['method'],
-                        })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      onChange={(e) => updateAPI(apiName, { method: e.target.value as APIConfig['method'] })}
+                      className={inputClass}
                     >
                       <option value="GET">GET</option>
                       <option value="POST">POST</option>
@@ -389,55 +347,53 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">API Key</label>
+                    <label className={labelClass}>API Key</label>
                     <input
                       type="password"
                       value={apiConfig.apiKey || ''}
-                      onChange={(e) =>
-                        updateAPI(apiName, { apiKey: e.target.value })
-                      }
-                      placeholder="Enter API key"
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      onChange={(e) => updateAPI(apiName, { apiKey: e.target.value })}
+                      placeholder="*****"
+                      className={inputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Timeout (ms)</label>
+                    <label className={labelClass}>Timeout (ms)</label>
                     <input
                       type="number"
                       value={apiConfig.timeout || 10000}
-                      onChange={(e) =>
-                        updateAPI(apiName, { timeout: parseInt(e.target.value) })
-                      }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      onChange={(e) => updateAPI(apiName, { timeout: Number(e.target.value) })}
+                      className={inputClass}
                     />
                   </div>
                 </div>
               </div>
             ))}
 
-            <div className="flex gap-2 mt-3">
+            <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={newApiName}
                 onChange={(e) => setNewApiName(e.target.value)}
-                placeholder="API name"
-                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
-                onKeyPress={(e) => e.key === 'Enter' && addAPI()}
+                placeholder="Add API alias"
+                className={inputClass}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addAPI();
+                  }
+                }}
               />
               <button
                 onClick={addAPI}
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                className="rounded-lg border border-indigo-400 px-3 py-2 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/10"
               >
-                Add API
+                Add
               </button>
             </div>
           </div>
 
-          <button
-            onClick={handleSave}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
+          <button onClick={handleSave} className={buttonPrimaryClass}>
             Save Configuration
           </button>
         </div>
@@ -445,25 +401,19 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
     );
   }
 
-  // Response Node Configuration
   if (node.type === 'response') {
     return (
-      <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800">Response Configuration</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+      <div className={panelClass}>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className={headingClass}>Response Configuration</h2>
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
             ✕
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5 text-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Response Type
-            </label>
+            <label className={labelClass}>Response Type</label>
             <select
               value={config.responseType || 'text'}
               onChange={(e) =>
@@ -472,7 +422,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                   responseType: e.target.value as 'text' | 'structured' | 'ui-component',
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className={inputClass}
             >
               <option value="text">Text</option>
               <option value="structured">Structured Data</option>
@@ -480,10 +430,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
             </select>
           </div>
 
-          <button
-            onClick={handleSave}
-            className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-          >
+          <button onClick={handleSave} className={buttonPrimaryClass}>
             Save Configuration
           </button>
         </div>
