@@ -20,7 +20,7 @@ const VendorHighlights = () => {
       const { data } = await apiClient.get('/products', {
         params: { page: 0, limit: 100 },
       });
-      const vendors = new Set((data?.products || []).map((p: any) => p.vendor?.id).filter(Boolean));
+      const vendors = new Set((data?.data || []).map((p: any) => p.vendor?.id || p.vendorId).filter(Boolean));
       return { vendorCount: vendors.size };
     },
   });
@@ -31,7 +31,7 @@ const VendorHighlights = () => {
       const { data } = await apiClient.get('/products', {
         params: { page: 0, limit: 50 },
       });
-      const products = data?.products || [];
+      const products = data?.data || [];
       return products.map((product: any) => ({
         vendor: product.vendor_profile || { id: product.vendorId, full_name: '', email: '' },
         product: product,

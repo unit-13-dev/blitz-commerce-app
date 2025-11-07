@@ -1,17 +1,17 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id ?? null;
-  
-  // Allow public access for viewing groups
   try {
+    const { id } = await params;
+    const user = await getCurrentUser(); // Optional auth for viewing groups
+    const userId = user?.id ?? null;
+    
+    // Allow public access for viewing groups
     const group = await prisma.group.findUnique({
       where: { id },
       include: {
@@ -61,19 +61,19 @@ export async function GET(
     });
 
     if (!group) {
-      return NextResponse.json({ message: "Group not found" }, { status: 404 });
+      return ApiResponseHandler.notFound("Group not found");
     }
 
     // Check if user is member or group is public
-    const isMember = group.members.some((m) => m.userId === userId);
+    const isMember = userId ? group.members.some((m) => m.userId === userId) : false;
     if (group.isPrivate && !isMember && group.creatorId !== userId) {
-      return NextResponse.json({ message: "Access denied" }, { status: 403 });
+      return ApiResponseHandler.forbidden("Access denied: This is a private group");
     }
 
-    return NextResponse.json({ group });
-  } catch (error) {
+    return ApiResponseHandler.success({ group }, "Group fetched successfully");
+  } catch (error: any) {
     console.error("Group GET error", error);
-    return NextResponse.json({ message: "Failed to fetch group" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch group", 500, error);
   }
 }
 
@@ -81,20 +81,20 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
+
     const group = await prisma.group.findUnique({
       where: { id },
     });
 
-    if (!group || group.creatorId !== userId) {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    if (!group) {
+      return ApiResponseHandler.notFound("Group not found");
+    }
+
+    if (group.creatorId !== user.id && user.role !== "admin") {
+      return ApiResponseHandler.forbidden("Only the group creator can update this group");
     }
 
     const body = await request.json();
@@ -103,22 +103,53 @@ export async function PUT(
     const updated = await prisma.group.update({
       where: { id },
       data: {
-        name,
-        description,
-        isPrivate,
-        memberLimit,
+        name: name ?? undefined,
+        description: description ?? undefined,
+        isPrivate: isPrivate ?? undefined,
+        memberLimit: memberLimit ?? undefined,
       },
       include: {
-        creator: true,
-        product: true,
-        members: true,
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        product: {
+          include: {
+            images: {
+              orderBy: { displayOrder: "asc" },
+              take: 1,
+            },
+          },
+        },
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return NextResponse.json({ group: updated });
-  } catch (error) {
+    return ApiResponseHandler.success({ group: updated }, "Group updated successfully");
+  } catch (error: any) {
     console.error("Group PUT error", error);
-    return NextResponse.json({ message: "Failed to update group" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to update group", 500, error);
   }
 }
 
@@ -126,32 +157,38 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
+
     const group = await prisma.group.findUnique({
       where: { id },
     });
 
-    const role = session?.user?.role;
+    if (!group) {
+      return ApiResponseHandler.notFound("Group not found");
+    }
 
-    if (!group || (group.creatorId !== userId && role !== "admin")) {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    if (group.creatorId !== user.id && user.role !== "admin") {
+      return ApiResponseHandler.forbidden("Only the group creator or admin can delete this group");
     }
 
     await prisma.group.delete({
       where: { id },
     });
 
-    return NextResponse.json({ message: "Group deleted" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Group deleted" }, "Group deleted successfully");
+  } catch (error: any) {
     console.error("Group DELETE error", error);
-    return NextResponse.json({ message: "Failed to delete group" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to delete group", 500, error);
   }
 }
 

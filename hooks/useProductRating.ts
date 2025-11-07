@@ -15,8 +15,8 @@ export const useProductRating = (productId: string) => {
       try {
         const { data } = await apiClient.get(`/products/${productId}/rating`);
         return {
-          averageRating: data?.averageRating ?? 0,
-          reviewCount: data?.reviewCount ?? 0,
+          averageRating: data?.data?.averageRating ?? 0,
+          reviewCount: data?.data?.reviewCount ?? 0,
         };
       } catch (error) {
         console.error('Error fetching product rating:', error);

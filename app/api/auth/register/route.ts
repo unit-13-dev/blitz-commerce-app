@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import { UserRole } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 interface RegisterPayload {
   email: string;
@@ -20,16 +20,20 @@ export async function POST(request: Request) {
     const role = (body.role ?? "user") as UserRole;
 
     if (!email || !password) {
-      return NextResponse.json({ message: "Email and password are required" }, { status: 400 });
+      return ApiResponseHandler.badRequest("Email and password are required");
+    }
+
+    if (password.length < 6) {
+      return ApiResponseHandler.badRequest("Password must be at least 6 characters");
     }
 
     if (!Object.values(UserRole).includes(role)) {
-      return NextResponse.json({ message: "Invalid role" }, { status: 400 });
+      return ApiResponseHandler.badRequest("Invalid role");
     }
 
     const existing = await prisma.profile.findUnique({ where: { email } });
     if (existing) {
-      return NextResponse.json({ message: "An account with this email already exists" }, { status: 409 });
+      return ApiResponseHandler.conflict("An account with this email already exists");
     }
 
     const passwordHash = await hash(password, 12);
@@ -43,11 +47,19 @@ export async function POST(request: Request) {
         role,
         passwordHash,
       },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
     });
 
-    return NextResponse.json({ profile }, { status: 201 });
-  } catch (error) {
+    return ApiResponseHandler.created({ profile }, "Account created successfully");
+  } catch (error: any) {
     console.error("Register POST error", error);
-    return NextResponse.json({ message: "Failed to register" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to register", 500, error);
   }
 }

@@ -1,32 +1,31 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { getCurrentUser } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = await params;
-  const session = await getAuthSession();
-  const followerId = session?.user?.id;
-
-  if (!followerId) {
-    return NextResponse.json({ isFollowing: false });
-  }
-
   try {
+    const { userId } = await params;
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return ApiResponseHandler.success({ isFollowing: false }, "Follow status fetched");
+    }
+
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
-          followerId,
+          followerId: user.id,
           followingId: userId,
         },
       },
     });
 
-    return NextResponse.json({ isFollowing: !!follow });
-  } catch (error) {
+    return ApiResponseHandler.success({ isFollowing: !!follow }, "Follow status fetched");
+  } catch (error: any) {
     console.error("Follow status error", error);
-    return NextResponse.json({ isFollowing: false });
+    return ApiResponseHandler.success({ isFollowing: false }, "Follow status fetched");
   }
 }

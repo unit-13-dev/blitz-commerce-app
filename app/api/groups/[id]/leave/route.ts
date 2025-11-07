@@ -1,38 +1,39 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
+
     const member = await prisma.groupMember.findFirst({
       where: {
         groupId: id,
-        userId,
+        userId: user.id,
       },
     });
 
     if (!member) {
-      return NextResponse.json({ message: "Not a member" }, { status: 404 });
+      return ApiResponseHandler.notFound("You are not a member of this group");
     }
 
     await prisma.groupMember.delete({
       where: { id: member.id },
     });
 
-    return NextResponse.json({ message: "Left group successfully" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Left group successfully" }, "Left group successfully");
+  } catch (error: any) {
     console.error("Group leave error", error);
-    return NextResponse.json({ message: "Failed to leave group" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to leave group", 500, error);
   }
 }
 

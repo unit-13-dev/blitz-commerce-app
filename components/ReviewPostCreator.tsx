@@ -39,9 +39,9 @@ const ReviewPostCreator: React.FC<ReviewPostCreatorProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userProfile = {
-    name: profile?.fullName || user?.fullName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User",
-    avatar: profile?.avatarUrl || user?.imageUrl || null,
-    username: `@${user?.primaryEmailAddress?.emailAddress?.split("@")[0] || user?.id?.slice(0, 8) || 'user'}`,
+    name: profile?.fullName || user?.name || user?.email?.split("@")[0] || "User",
+    avatar: profile?.avatarUrl || user?.image || null,
+    username: `@${user?.email?.split("@")[0] || user?.id?.slice(0, 8) || 'user'}`,
   };
 
   const handleFileSelect = useCallback(

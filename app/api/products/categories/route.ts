@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireRole } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
+import { UserRole } from "@prisma/client";
 
 export async function GET() {
   try {
@@ -8,35 +9,38 @@ export async function GET() {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json({ categories });
-  } catch (error) {
+    return ApiResponseHandler.success({ categories }, "Categories fetched successfully");
+  } catch (error: any) {
     console.error("Categories GET error", error);
-    return NextResponse.json({ message: "Failed to fetch categories" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch categories", 500, error);
   }
 }
 
 export async function POST(request: Request) {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const role = session?.user?.role;
-    if (role !== "admin") {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    await requireRole("admin" as UserRole);
+    const body = await request.json();
+    
+    if (!body.name || body.name.trim().length === 0) {
+      return ApiResponseHandler.badRequest("Category name is required");
     }
 
-    const body = await request.json();
     const category = await prisma.productCategory.create({
-      data: { name: body.name },
+      data: { name: body.name.trim() },
     });
 
-    return NextResponse.json({ category }, { status: 201 });
-  } catch (error) {
+    return ApiResponseHandler.created({ category }, "Category created successfully");
+  } catch (error: any) {
     console.error("Category POST error", error);
-    return NextResponse.json({ message: "Failed to create category" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to create category", 500, error);
   }
 }
 

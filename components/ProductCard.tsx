@@ -46,7 +46,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
         const { data } = await apiClient.get('/wishlist', {
           params: { productId: product.id }
         });
-        return data?.items?.length > 0;
+        return data?.data?.exists || false;
       } catch {
         return false;
       }
@@ -75,9 +75,9 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const removeFromWishlistMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Please login');
-      const { data } = await apiClient.get('/wishlist', { params: { productId: product.id } });
-      if (data?.items?.[0]?.id) {
-        await apiClient.delete(`/wishlist/${data.items[0].id}`);
+      const { data: statusData } = await apiClient.get('/wishlist', { params: { productId: product.id } });
+      if (statusData?.data?.exists) {
+        await apiClient.delete(`/wishlist/${product.id}`);
       }
     },
     onSuccess: () => {

@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const idsParam = searchParams.get("ids");
     if (!idsParam) {
-      return NextResponse.json({ images: {} });
+      return ApiResponseHandler.success({ images: {} }, "Images fetched successfully");
     }
 
     const productIds = idsParam.split(",").filter(Boolean);
@@ -39,10 +39,10 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ images: imageMap });
-  } catch (error) {
+    return ApiResponseHandler.success({ images: imageMap }, "Images fetched successfully");
+  } catch (error: any) {
     console.error("Product images GET error", error);
-    return NextResponse.json({ images: {} }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch images", 500, error);
   }
 }
 

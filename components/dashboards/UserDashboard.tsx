@@ -33,7 +33,7 @@ const UserDashboard = () => {
     enabled: !!profile?.id,
   });
 
-  const posts = postsResponse?.posts || [];
+  const posts = postsResponse?.data || [];
 
   const { data: cartResponse } = useQuery({
     queryKey: ['cart', profile?.id],
@@ -45,7 +45,7 @@ const UserDashboard = () => {
     enabled: !!profile?.id,
   });
 
-  const cartItems = cartResponse?.items || [];
+  const cartItems = cartResponse?.data?.items || [];
 
   const { data: ordersResponse } = useQuery({
     queryKey: ['orders', profile?.id],
@@ -57,7 +57,7 @@ const UserDashboard = () => {
     enabled: !!profile?.id,
   });
 
-  const orders = ordersResponse?.orders || [];
+  const orders = ordersResponse?.data?.orders || [];
 
   const handleProfileUpdate = async () => {
     try {

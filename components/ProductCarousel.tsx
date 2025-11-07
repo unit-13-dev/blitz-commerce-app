@@ -17,7 +17,7 @@ const ProductCarousel = () => {
       const { data } = await apiClient.get('/products', {
         params: { page: 0, limit: 10 },
       });
-      return data?.products || [];
+      return data?.data || [];
     },
   });
 

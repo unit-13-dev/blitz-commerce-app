@@ -36,7 +36,7 @@ const CommentsDialog = ({ postId, isOpen, onOpenChange }: CommentsDialogProps) =
     queryKey: ['post-comments', postId],
     queryFn: async () => {
       const { data } = await apiClient.get(`/posts/${postId}/comments`);
-      return data?.comments || [];
+      return data?.data?.comments || [];
     },
     enabled: isOpen && !!postId,
   });
@@ -45,7 +45,7 @@ const CommentsDialog = ({ postId, isOpen, onOpenChange }: CommentsDialogProps) =
     mutationFn: async (content: string) => {
       if (!user) throw new Error('Please login to comment');
       const { data } = await apiClient.post(`/posts/${postId}/comments`, { content });
-      return data.comment;
+      return data?.data?.comment;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['post-comments', postId] });

@@ -1,20 +1,14 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
     const body = await request.json();
     const { like } = body;
 
@@ -22,7 +16,7 @@ export async function POST(
       where: {
         commentId_userId: {
           commentId: id,
-          userId,
+          userId: user.id,
         },
       },
     });
@@ -32,21 +26,26 @@ export async function POST(
         await prisma.commentLike.create({
           data: {
             commentId: id,
-            userId,
+            userId: user.id,
           },
         });
       }
-      return NextResponse.json({ liked: true });
+      return ApiResponseHandler.success({ liked: true }, "Comment liked successfully");
     } else {
       if (existing) {
         await prisma.commentLike.delete({
           where: { id: existing.id },
         });
       }
-      return NextResponse.json({ liked: false });
+      return ApiResponseHandler.success({ liked: false }, "Comment unliked successfully");
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Comment like error", error);
-    return NextResponse.json({ message: "Failed to toggle like" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to toggle like", 500, error);
   }
 }

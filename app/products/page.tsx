@@ -27,7 +27,7 @@ const Products = () => {
     queryKey: ['product-categories'],
     queryFn: async () => {
       const { data } = await apiClient.get('/products/categories');
-      return data.categories || [];
+      return data?.data?.categories || [];
     },
   });
 
@@ -51,13 +51,16 @@ const Products = () => {
       });
       return data;
     },
-    getNextPageParam: (lastPage, allPages) => {
-      return lastPage.hasMore ? allPages.length : undefined;
+    getNextPageParam: (lastPage: any, allPages) => {
+      const hasMore = lastPage?.meta?.pagination 
+        ? allPages.length < lastPage.meta.pagination.totalPages 
+        : false;
+      return hasMore ? allPages.length : undefined;
     },
     initialPageParam: 0,
   });
 
-  const allProducts = data?.pages.flatMap((page: any) => page.products) || [];
+  const allProducts = data?.pages.flatMap((page: any) => page?.data || []) || [];
 
   const handleScroll = useCallback(() => {
     if (

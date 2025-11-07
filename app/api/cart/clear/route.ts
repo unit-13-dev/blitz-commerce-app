@@ -1,23 +1,24 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function DELETE() {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const user = await requireAuth();
+
     await prisma.cartItem.deleteMany({
-      where: { userId },
+      where: { userId: user.id },
     });
 
-    return NextResponse.json({ message: "Cart cleared" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Cart cleared" }, "Cart cleared successfully");
+  } catch (error: any) {
     console.error("Cart clear error", error);
-    return NextResponse.json({ message: "Failed to clear cart" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to clear cart", 500, error);
   }
 }
 

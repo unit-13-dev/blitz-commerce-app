@@ -20,24 +20,30 @@ const SocialFeed = () => {
     queryKey: ['social-feed-posts'],
     queryFn: async () => {
       const { data } = await apiClient.get('/posts', { params: { limit: 10 } });
-      return (data?.posts || []).map((post: any) => ({
-        id: post.id,
-        user_id: post.userId,
-        content: post.content,
-        images: post.images?.sort((a: any, b: any) => a.displayOrder - b.displayOrder) || [],
-        likes: post.likesCount || 0,
-        comments: post.commentsCount || 0,
-        shares: post.sharesCount || 0,
-        views: post.viewsCount || 0,
-        timestamp: new Date(post.createdAt).toLocaleDateString(),
-        isLiked: user ? post.likedByCurrentUser : false,
-        user: {
-          id: post.userId,
-          name: post.user?.fullName || post.user?.email?.split('@')[0] || 'Unknown User',
-          avatar: post.user?.avatarUrl || null,
-          username: `@${post.user?.email?.split('@')[0] || 'user'}`
-        }
-      }));
+      return (data?.data || []).map((post: any) => {
+        const isLiked = user && post.likes 
+          ? post.likes.some((like: any) => like.userId === user.id || (like.user && like.user.id === user.id))
+          : false;
+        
+        return {
+          id: post.id,
+          user_id: post.userId,
+          content: post.content,
+          images: post.images?.sort((a: any, b: any) => a.displayOrder - b.displayOrder) || [],
+          likes: post._count?.likes || 0,
+          comments: post._count?.comments || 0,
+          shares: 0,
+          views: 0,
+          timestamp: new Date(post.createdAt).toLocaleDateString(),
+          isLiked,
+          user: {
+            id: post.userId,
+            name: post.user?.fullName || post.user?.email?.split('@')[0] || 'Unknown User',
+            avatar: post.user?.avatarUrl || null,
+            username: `@${post.user?.email?.split('@')[0] || 'user'}`
+          }
+        };
+      });
     },
   });
 

@@ -28,8 +28,8 @@ const VendorDashboard = () => {
     queryKey: ['kyc', profile?.id],
     queryFn: async () => {
       if (!profile?.id) return null;
-      const { data } = await apiClient.get(`/kyc/${profile.id}`);
-      return data.kyc;
+      const { data } = await apiClient.get(`/kyc`);
+      return data.data?.kyc;
     },
     enabled: !!profile?.id,
   });
@@ -43,7 +43,7 @@ const VendorDashboard = () => {
       const { data } = await apiClient.get('/products', {
         params: { vendorId: profile.id },
       });
-      return data.products || [];
+      return data.data || [];
     },
     enabled: !!profile?.id,
   });

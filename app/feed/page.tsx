@@ -29,11 +29,16 @@ const Feed = () => {
       });
       return data;
     },
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length : undefined),
+    getNextPageParam: (lastPage: any, allPages) => {
+      const hasMore = lastPage?.meta?.pagination 
+        ? allPages.length < lastPage.meta.pagination.totalPages 
+        : false;
+      return hasMore ? allPages.length : undefined;
+    },
     initialPageParam: 0,
   });
 
-  const posts = data?.pages.flatMap((page: any) => page.posts) || [];
+  const posts = data?.pages.flatMap((page: any) => page?.data || []) || [];
 
   useEffect(() => {
     const handleScroll = () => {

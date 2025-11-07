@@ -125,10 +125,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
   const handleFormChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, type, checked } = event.target;
+    const target = event.target;
+    const { name, value } = target;
 
-    if (type === 'checkbox') {
-      setForm((prev) => ({ ...prev, [name]: checked }));
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') {
+      setForm((prev) => ({ ...prev, [name]: target.checked }));
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
     }

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
   // Allow public access to groups for listing
@@ -53,27 +53,26 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ groups });
-  } catch (error) {
+    return ApiResponseHandler.success({ groups }, "Groups fetched successfully");
+  } catch (error: any) {
     console.error("Groups GET error", error);
-    return NextResponse.json({ message: "Failed to fetch groups" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch groups", 500, error);
   }
 }
 
 export async function POST(request: Request) {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const user = await requireAuth();
     const body = await request.json();
     const { productId, name, description, isPrivate, memberLimit, accessCode } = body;
 
+    if (!productId || !name) {
+      return ApiResponseHandler.badRequest("Product ID and name are required");
+    }
+
     const group = await prisma.group.create({
       data: {
-        creatorId: userId,
+        creatorId: user.id,
         productId,
         name,
         description,
@@ -83,21 +82,49 @@ export async function POST(request: Request) {
         codeGeneratedAt: isPrivate ? new Date() : null,
         members: {
           create: {
-            userId,
+            userId: user.id,
           },
         },
       },
       include: {
-        creator: true,
-        product: true,
-        members: true,
+        creator: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        product: {
+          include: {
+            images: {
+              orderBy: { displayOrder: "asc" },
+              take: 1,
+            },
+          },
+        },
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return NextResponse.json({ group }, { status: 201 });
-  } catch (error) {
+    return ApiResponseHandler.created({ group }, "Group created successfully");
+  } catch (error: any) {
     console.error("Group POST error", error);
-    return NextResponse.json({ message: "Failed to create group" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to create group", 500, error);
   }
 }
 

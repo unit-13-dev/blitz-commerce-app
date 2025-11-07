@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const searchTerm = q.trim().toLowerCase();
 
     if (!searchTerm) {
-      return NextResponse.json({ users: [], products: [] });
+      return ApiResponseHandler.success({ users: [], products: [] }, "Search completed");
     }
 
     const results: { users: any[]; products: any[] } = {
@@ -74,9 +74,9 @@ export async function GET(request: Request) {
       }));
     }
 
-    return NextResponse.json(results);
-  } catch (error) {
+    return ApiResponseHandler.success(results, "Search completed successfully");
+  } catch (error: any) {
     console.error("Search GET error", error);
-    return NextResponse.json({ message: "Failed to search" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to search", 500, error);
   }
 }

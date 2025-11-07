@@ -1,52 +1,55 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET() {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const user = await requireAuth();
+
     const drafts = await prisma.draft.findMany({
-      where: { userId },
+      where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
 
-    return NextResponse.json({ drafts });
-  } catch (error) {
+    return ApiResponseHandler.success({ drafts }, "Drafts fetched successfully");
+  } catch (error: any) {
     console.error("Drafts GET error", error);
-    return NextResponse.json({ message: "Failed to fetch drafts" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to fetch drafts", 500, error);
   }
 }
 
 export async function POST(request: Request) {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const user = await requireAuth();
     const body = await request.json();
     const { content, privacy = "public", feeling } = body;
 
+    if (!content || content.trim().length === 0) {
+      return ApiResponseHandler.badRequest("Draft content is required");
+    }
+
     const draft = await prisma.draft.create({
       data: {
-        userId,
-        content,
+        userId: user.id,
+        content: content.trim(),
         privacy,
         feeling,
       },
     });
 
-    return NextResponse.json({ draft }, { status: 201 });
-  } catch (error) {
+    return ApiResponseHandler.created({ draft }, "Draft created successfully");
+  } catch (error: any) {
     console.error("Draft POST error", error);
-    return NextResponse.json({ message: "Failed to create draft" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to create draft", 500, error);
   }
 }

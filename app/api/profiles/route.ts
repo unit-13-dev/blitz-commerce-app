@@ -1,26 +1,60 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
+
+export async function GET() {
+  try {
+    const user = await requireAuth();
+    
+    const profile = await prisma.profile.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        avatarUrl: true,
+        bio: true,
+        website: true,
+        location: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!profile) {
+      return ApiResponseHandler.notFound("Profile not found");
+    }
+
+    return ApiResponseHandler.success({ profile }, "Profile fetched successfully");
+  } catch (error: any) {
+    console.error("Profile GET error", error);
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to fetch profile", 500, error);
+  }
+}
 
 export async function POST(request: Request) {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  const payload = await request.json();
-
-  const targetUserId: string | null = payload.id ?? userId ?? null;
-
-  if (!targetUserId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
-  if (userId && userId !== targetUserId) {
-    const actorRole = session?.user?.role;
-    if (actorRole !== "admin") {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-    }
-  }
-
   try {
+    const user = await getCurrentUser();
+    const payload = await request.json();
+
+    const targetUserId: string | null = payload.id ?? user?.id ?? null;
+
+    if (!targetUserId) {
+      return ApiResponseHandler.unauthorized();
+    }
+
+    if (user && user.id !== targetUserId) {
+      if (user.role !== "admin") {
+        return ApiResponseHandler.forbidden("You can only update your own profile");
+      }
+    }
+
     const profile = await prisma.profile.upsert({
       where: { id: targetUserId },
       create: {
@@ -44,10 +78,18 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ profile }, { status: 201 });
-  } catch (error) {
-    console.error("Profile create error", error);
-    return NextResponse.json({ message: "Failed to create profile" }, { status: 500 });
+    return ApiResponseHandler.created({ profile }, "Profile updated successfully");
+  } catch (error: any) {
+    console.error("Profile POST error", error);
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to update profile", 500, error);
   }
 }
 

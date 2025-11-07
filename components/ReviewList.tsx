@@ -48,13 +48,15 @@ const ReviewList: React.FC<ReviewListProps> = ({ productId, productVendorId }) =
       return response.data;
     },
     getNextPageParam: (lastPage: any, allPages) => {
-      if (!lastPage?.hasMore) return undefined;
-      return allPages.length;
+      const hasMore = lastPage?.meta?.pagination 
+        ? allPages.length < lastPage.meta.pagination.totalPages 
+        : false;
+      return hasMore ? allPages.length : undefined;
     },
     initialPageParam: 0,
   });
 
-  const reviews = data?.pages.flatMap((page: any) => page?.reviews || []) || [];
+  const reviews = data?.pages.flatMap((page: any) => page?.data || []) || [];
 
   if (isLoading) {
     return (

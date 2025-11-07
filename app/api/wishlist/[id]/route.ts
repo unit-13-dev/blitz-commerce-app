@@ -1,22 +1,18 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
+
     const deleted = await prisma.wishlistItem.deleteMany({
       where: {
-        userId,
+        userId: user.id,
         OR: [
           { id },
           { productId: id },
@@ -25,13 +21,18 @@ export async function DELETE(
     });
 
     if (deleted.count === 0) {
-      return NextResponse.json({ message: "Not found" }, { status: 404 });
+      return ApiResponseHandler.notFound("Item not found in wishlist");
     }
 
-    return NextResponse.json({ message: "Removed from wishlist" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Removed from wishlist" }, "Item removed from wishlist successfully");
+  } catch (error: any) {
     console.error("Wishlist DELETE error", error);
-    return NextResponse.json({ message: "Failed to remove from wishlist" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to remove from wishlist", 500, error);
   }
 }
 

@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await fetch(`/api/profiles/${userId}`);
       if (response.ok) {
         const data = await response.json();
-        setProfile(data.profile ?? null);
+        setProfile(data.data?.profile ?? null);
       } else if (response.status === 404) {
         setProfile(null);
       } else {
@@ -169,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json();
-      setProfile(data.profile ?? null);
+      setProfile(data.data?.profile ?? null);
       return { error: null };
     } catch (error) {
       console.error('Update profile error', error);

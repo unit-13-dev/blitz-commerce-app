@@ -31,7 +31,7 @@ const Cart = () => {
     enabled: !!user?.id,
   });
 
-  const cartItems = cartData?.items || [];
+  const cartItems = cartData?.data?.items || [];
 
   const updateQuantityMutation = useMutation({
     mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {

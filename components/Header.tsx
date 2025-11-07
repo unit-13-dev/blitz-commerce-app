@@ -40,7 +40,7 @@ export default function Header() {
       const response = await fetch('/api/cart');
       if (!response.ok) return 0;
       const data = await response.json();
-      return data.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
+      return data.data?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
     },
     enabled: !!user && !isVendor,
   });
@@ -52,7 +52,7 @@ export default function Header() {
       const response = await fetch('/api/wishlist');
       if (!response.ok) return 0;
       const data = await response.json();
-      return data.items?.length || 0;
+      return data.data?.items?.length || 0;
     },
     enabled: !!user && !isVendor,
   });
@@ -74,7 +74,7 @@ export default function Header() {
                 <img 
                   src="/GupShop.png" 
                   alt="Gup Shop Logo" 
-                  className="h-16 object-conta in"
+                  className="h-16 object-contain"
                 />
               </Link>
 

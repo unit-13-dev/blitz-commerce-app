@@ -86,32 +86,34 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review, productId }) => {
             </p>
 
             {/* Media Display */}
-            {review.post_images && review.post_images.length > 0 && (
-              <div className="mt-3">
-                <div className={`grid gap-2 ${
-                  review.post_images.length === 1 ? 'grid-cols-1' :
-                  review.post_images.length === 2 ? 'grid-cols-2' :
-                  review.post_images.length === 3 ? 'grid-cols-3' :
-                  'grid-cols-2'
-                }`}>
-                  {review.post_images.map((image, index) => {
-                    const isVideo = image.image_url.match(/\.(mp4|webm|ogg|mov|avi|mkv)$/i);
-                    
-                    return (
-                      <div 
-                        key={index} 
-                        className={`relative rounded-xl overflow-hidden ${
-                          review.post_images.length === 3 && index === 2 ? 'col-span-2' :
-                          review.post_images.length === 4 && index === 3 ? 'col-span-2' : ''
-                        }`}
-                      >
-                        <div className={`${
-                          review.post_images.length === 1 ? 'aspect-[4/3]' :
-                          review.post_images.length === 2 ? 'aspect-square' :
-                          review.post_images.length === 3 && index === 2 ? 'aspect-[2/1]' :
-                          review.post_images.length === 4 && index === 3 ? 'aspect-[2/1]' :
-                          'aspect-square'
-                        }`}>
+            {review.post_images && review.post_images.length > 0 && (() => {
+              const images = review.post_images;
+              return (
+                <div className="mt-3">
+                  <div className={`grid gap-2 ${
+                    images.length === 1 ? 'grid-cols-1' :
+                    images.length === 2 ? 'grid-cols-2' :
+                    images.length === 3 ? 'grid-cols-3' :
+                    'grid-cols-2'
+                  }`}>
+                    {images.map((image, index) => {
+                      const isVideo = image.image_url.match(/\.(mp4|webm|ogg|mov|avi|mkv)$/i);
+                      
+                      return (
+                        <div 
+                          key={index} 
+                          className={`relative rounded-xl overflow-hidden ${
+                            images.length === 3 && index === 2 ? 'col-span-2' :
+                            images.length === 4 && index === 3 ? 'col-span-2' : ''
+                          }`}
+                        >
+                          <div className={`${
+                            images.length === 1 ? 'aspect-[4/3]' :
+                            images.length === 2 ? 'aspect-square' :
+                            images.length === 3 && index === 2 ? 'aspect-[2/1]' :
+                            images.length === 4 && index === 3 ? 'aspect-[2/1]' :
+                            'aspect-square'
+                          }`}>
                           {isVideo ? (
                             <video
                               src={image.image_url}
@@ -131,8 +133,9 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review, productId }) => {
                     );
                   })}
                 </div>
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </CardContent>

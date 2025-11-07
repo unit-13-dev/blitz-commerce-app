@@ -30,7 +30,7 @@ export default function CategoryDropdown({
     queryKey: ["product-categories"],
     queryFn: async () => {
       const { data } = await apiClient.get('/products/categories');
-      return data?.categories || [];
+      return data?.data?.categories || [];
     },
   });
 

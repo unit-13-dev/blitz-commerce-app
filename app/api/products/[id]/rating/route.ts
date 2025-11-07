@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
   try {
+    const { id } = await params;
     const posts = await prisma.post.findMany({
       where: {
         status: "published",
@@ -35,10 +35,10 @@ export async function GET(
     const reviewCount = ratings.length;
     const averageRating = reviewCount > 0 ? ratings.reduce((sum, rating) => sum + rating, 0) / reviewCount : 0;
 
-    return NextResponse.json({ averageRating, reviewCount });
-  } catch (error) {
+    return ApiResponseHandler.success({ averageRating, reviewCount }, "Rating fetched successfully");
+  } catch (error: any) {
     console.error("Product rating GET error", error);
-    return NextResponse.json({ averageRating: 0, reviewCount: 0 }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch rating", 500, error);
   }
 }
 

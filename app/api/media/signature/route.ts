@@ -1,23 +1,23 @@
-import { NextResponse } from "next/server";
 import { createSignedUploadParams } from "@/lib/cloudinary";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
-  const { searchParams } = new URL(request.url);
-  const folder = searchParams.get("folder") ?? `users/${userId}`;
-
   try {
+    const user = await requireAuth();
+    const { searchParams } = new URL(request.url);
+    const folder = searchParams.get("folder") ?? `users/${user.id}`;
+
     const payload = createSignedUploadParams(folder);
-    return NextResponse.json(payload);
-  } catch (error) {
+    return ApiResponseHandler.success(payload, "Signature generated successfully");
+  } catch (error: any) {
     console.error("Cloudinary signature error", error);
-    return NextResponse.json({ message: "Failed to generate signature" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to generate signature", 500, error);
   }
 }
 

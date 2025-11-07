@@ -1,22 +1,22 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
   try {
+    const { id } = await params;
     const discountTiers = await prisma.productDiscountTier.findMany({
       where: { productId: id },
       orderBy: { tierNumber: "asc" },
     });
 
-    return NextResponse.json({ discountTiers });
-  } catch (error) {
+    return ApiResponseHandler.success({ discountTiers }, "Discount tiers fetched successfully");
+  } catch (error: any) {
     console.error("Discount tiers GET error", error);
-    return NextResponse.json({ message: "Failed to fetch discount tiers" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch discount tiers", 500, error);
   }
 }
 
@@ -24,26 +24,20 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  const role = session?.user?.role;
-
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
+
     const product = await prisma.product.findUnique({
       where: { id },
     });
 
     if (!product) {
-      return NextResponse.json({ message: "Product not found" }, { status: 404 });
+      return ApiResponseHandler.notFound("Product not found");
     }
 
-    if (product.vendorId !== userId && role !== "admin") {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    if (product.vendorId !== user.id && user.role !== "admin") {
+      return ApiResponseHandler.forbidden("You can only update discount tiers for your own products");
     }
 
     const body = await request.json();
@@ -83,9 +77,17 @@ export async function PUT(
       orderBy: { tierNumber: "asc" },
     });
 
-    return NextResponse.json({ discountTiers: updatedTiers });
-  } catch (error) {
+    return ApiResponseHandler.success({ discountTiers: updatedTiers }, "Discount tiers updated successfully");
+  } catch (error: any) {
     console.error("Discount tiers PUT error", error);
-    return NextResponse.json({ message: "Failed to update discount tiers" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to update discount tiers", 500, error);
   }
 }

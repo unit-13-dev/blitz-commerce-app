@@ -1,19 +1,14 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { id } = await params;
+    const user = await requireAuth();
     const body = await request.json();
     const { accessCode } = body;
 
@@ -25,38 +20,43 @@ export async function POST(
     });
 
     if (!group) {
-      return NextResponse.json({ message: "Group not found" }, { status: 404 });
+      return ApiResponseHandler.notFound("Group not found");
     }
 
     // Check if private and access code is required
     if (group.isPrivate) {
       if (!accessCode || accessCode !== group.accessCode) {
-        return NextResponse.json({ message: "Invalid access code" }, { status: 400 });
+        return ApiResponseHandler.badRequest("Invalid access code");
       }
     }
 
     // Check if already a member
-    const isMember = group.members.some((m) => m.userId === userId);
+    const isMember = group.members.some((m) => m.userId === user.id);
     if (isMember) {
-      return NextResponse.json({ message: "Already a member" }, { status: 400 });
+      return ApiResponseHandler.badRequest("Already a member of this group");
     }
 
     // Check member limit
     if (group.memberLimit > 0 && group.members.length >= group.memberLimit) {
-      return NextResponse.json({ message: "Group is full" }, { status: 400 });
+      return ApiResponseHandler.badRequest("Group is full");
     }
 
     await prisma.groupMember.create({
       data: {
         groupId: id,
-        userId,
+        userId: user.id,
       },
     });
 
-    return NextResponse.json({ message: "Joined group successfully" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Joined group successfully" }, "Joined group successfully");
+  } catch (error: any) {
     console.error("Group join error", error);
-    return NextResponse.json({ message: "Failed to join group" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to join group", 500, error);
   }
 }
 

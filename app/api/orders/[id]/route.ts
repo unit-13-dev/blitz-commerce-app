@@ -1,20 +1,14 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const isAdmin = session?.user?.role === "admin";
+    const { id } = await params;
+    const user = await requireAuth();
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -43,17 +37,26 @@ export async function GET(
     });
 
     if (!order) {
-      return NextResponse.json({ message: "Order not found" }, { status: 404 });
+      return ApiResponseHandler.notFound("Order not found");
     }
 
-    if (!isAdmin && order.userId !== userId) {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    const isAdmin = user.role === "admin";
+    if (!isAdmin && order.userId !== user.id) {
+      return ApiResponseHandler.forbidden("You can only view your own orders");
     }
 
-    return NextResponse.json({ order });
-  } catch (error) {
+    return ApiResponseHandler.success({ order }, "Order fetched successfully");
+  } catch (error: any) {
     console.error("Order GET error", error);
-    return NextResponse.json({ message: "Failed to fetch order" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to fetch order", 500, error);
   }
 }
 
@@ -61,17 +64,13 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await getAuthSession();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const role = session?.user?.role;
-    if (role !== "admin" && role !== "vendor") {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    const { id } = await params;
+    const user = await requireAuth();
+
+    // Only admin and vendor can update orders
+    if (user.role !== "admin" && user.role !== "vendor") {
+      return ApiResponseHandler.forbidden("Only admins and vendors can update orders");
     }
 
     const body = await request.json();
@@ -80,18 +79,45 @@ export async function PUT(
     const order = await prisma.order.update({
       where: { id },
       data: {
-        status,
-        paymentStatus,
+        status: status ? status : undefined,
+        paymentStatus: paymentStatus ? paymentStatus : undefined,
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                images: {
+                  orderBy: { displayOrder: "asc" },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        shippingAddress: true,
       },
     });
 
-    return NextResponse.json({ order });
-  } catch (error) {
+    return ApiResponseHandler.success({ order }, "Order updated successfully");
+  } catch (error: any) {
     console.error("Order PUT error", error);
-    return NextResponse.json({ message: "Failed to update order" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    if (error.message?.includes('FORBIDDEN')) {
+      return ApiResponseHandler.forbidden();
+    }
+    
+    return ApiResponseHandler.error("Failed to update order", 500, error);
   }
 }
 

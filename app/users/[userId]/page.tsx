@@ -28,7 +28,7 @@ export default function UserProfilePage() {
     enabled: !!userId,
   });
 
-  const profile = userData?.profile;
+  const profile = userData?.data?.profile;
   const isOwnProfile = currentUser?.id === userId;
 
   if (isLoading) {

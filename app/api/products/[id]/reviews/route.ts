@@ -1,26 +1,26 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") || "0");
-  const limit = parseInt(searchParams.get("limit") || "10");
-  const sortBy = searchParams.get("sortBy") || "newest";
-  const filterBy = searchParams.get("filterBy") || "all";
-  const skip = page * limit;
-
   try {
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "0");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const sortBy = searchParams.get("sortBy") || "newest";
+    const filterBy = searchParams.get("filterBy") || "all";
+    const skip = page * limit;
+
     // Get the review tag
     const reviewTag = await prisma.postTag.findUnique({
       where: { name: "review" },
     });
 
     if (!reviewTag) {
-      return NextResponse.json({ reviews: [], total: 0, hasMore: false });
+      return ApiResponseHandler.paginated([], 0, page, limit, "No reviews found");
     }
 
     // Build where clause
@@ -111,17 +111,16 @@ export async function GET(
       id: post.id,
       content: post.content,
       rating: post.rating,
-      createdAt: post.createdAt,
-      user: {
-        id: post.user.id,
+      created_at: post.createdAt,
+      profiles: {
         full_name: post.user.fullName || post.user.email?.split("@")[0] || "Unknown",
         avatar_url: post.user.avatarUrl,
       },
-      images: post.images.map((img) => ({
+      post_images: post.images.map((img) => ({
         image_url: img.imageUrl,
         display_order: img.displayOrder,
       })),
-      tags: post.tags.map((t) => ({
+      post_tag_mappings: post.tags.map((t) => ({
         post_tags: {
           name: t.tag.name,
         },
@@ -136,13 +135,9 @@ export async function GET(
       comments_count: post._count.comments,
     }));
 
-    return NextResponse.json({
-      reviews: processedReviews,
-      total,
-      hasMore: skip + limit < total,
-    });
-  } catch (error) {
+    return ApiResponseHandler.paginated(processedReviews, total, page, limit, "Reviews fetched successfully");
+  } catch (error: any) {
     console.error("Reviews GET error", error);
-    return NextResponse.json({ message: "Failed to fetch reviews" }, { status: 500 });
+    return ApiResponseHandler.error("Failed to fetch reviews", 500, error);
   }
 }

@@ -1,48 +1,48 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthSession } from "@/lib/auth-options";
+import { requireAuth } from "@/lib/auth-helpers";
+import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = await params;
-  const session = await getAuthSession();
-  const followerId = session?.user?.id;
-
-  if (!followerId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
-  if (followerId === userId) {
-    return NextResponse.json({ message: "Cannot follow yourself" }, { status: 400 });
-  }
-
   try {
+    const { userId } = await params;
+    const user = await requireAuth();
+
+    if (user.id === userId) {
+      return ApiResponseHandler.badRequest("Cannot follow yourself");
+    }
+
     const existing = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
-          followerId,
+          followerId: user.id,
           followingId: userId,
         },
       },
     });
 
     if (existing) {
-      return NextResponse.json({ message: "Already following" }, { status: 400 });
+      return ApiResponseHandler.badRequest("Already following this user");
     }
 
     await prisma.follow.create({
       data: {
-        followerId,
+        followerId: user.id,
         followingId: userId,
       },
     });
 
-    return NextResponse.json({ message: "Followed successfully" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Followed successfully" }, "Followed successfully");
+  } catch (error: any) {
     console.error("Follow error", error);
-    return NextResponse.json({ message: "Failed to follow user" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to follow user", 500, error);
   }
 }
 
@@ -50,25 +50,25 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = await params;
-  const session = await getAuthSession();
-  const followerId = session?.user?.id;
-
-  if (!followerId) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { userId } = await params;
+    const user = await requireAuth();
+
     await prisma.follow.deleteMany({
       where: {
-        followerId,
+        followerId: user.id,
         followingId: userId,
       },
     });
 
-    return NextResponse.json({ message: "Unfollowed successfully" });
-  } catch (error) {
+    return ApiResponseHandler.success({ message: "Unfollowed successfully" }, "Unfollowed successfully");
+  } catch (error: any) {
     console.error("Unfollow error", error);
-    return NextResponse.json({ message: "Failed to unfollow user" }, { status: 500 });
+    
+    if (error.message?.includes('UNAUTHORIZED')) {
+      return ApiResponseHandler.unauthorized();
+    }
+    
+    return ApiResponseHandler.error("Failed to unfollow user", 500, error);
   }
 }
