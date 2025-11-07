@@ -1175,89 +1175,90 @@ async function getModuleConfig(userId: string, intentType: string) {
 
 ## 🎨 React Flow Workflow Builder
 
-### **Workflow Canvas Component**
+### **Workflow Builder (Current UI)**
 
-```typescript
-// components/workflow/WorkflowCanvas.tsx
+- A business owns exactly one workflow (`workflows` table enforces `UNIQUE (business_id)` in migration `20251107121000_workflow_constraints.sql`).
+- The canvas always boots with three non-removable core nodes:
+  - **GenAI Intent Layer** – cannot be deleted, contains OpenAI model configuration.
+  - **Router / Orchestrator** – cannot be deleted, mediates calls into modules and receives their results.
+  - **Response Formatter** – optional clean-up node that modules can connect to if they need to format payloads before hitting the UI.
+- Additional modules (Order Tracking, Cancellation, FAQ, Refund) are added via a floating “+ Add Module” button (top-right). Each module can exist only once; once dropped, it disappears from the modal.
+- Connections are **manual**. Designers decide which edges exist (e.g., Router ↔ Tracking, Cancellation ↔ Refund). Selecting an edge and pressing Delete/Backspace removes that connection.
+- The router now exposes a **single right-side port**; every module connects to that endpoint. The router’s panel still tracks intent mappings (TRACK_SHIPMENT, CANCEL_ORDER, FAQ_SUPPORT) so multiple modules can coexist, but visually all wires route through that single handle.
+- When modules need to send structured UI payloads (e.g., `MODULE_TO_FRONTEND` telling the UI to render a radiobutton prompt), they can wire their output to the **Response Formatter** node. That node stays downstream, shapes the payload, and hands it back to the router (which delivers it to the client). Modules that prefer `GENAI_TO_FRONTEND` can instead route back to the router directly and rely on GenAI formatting.
+- GenAI and Router nodes are marked `deletable: false` inside React Flow; if users attempt to delete them the canvas immediately restores the node.
+- Every node/edge change (add/remove/reposition, module config edit) triggers an immediate POST to `/api/workflows`, ensuring Supabase always has the canonical workflow.
+- Module deletion is supported through the config panel’s “Remove module” button or Delete/Backspace on a selected module node.
+
+```tsx
+// components/workflow/WorkflowCanvas.tsx (excerpt)
 'use client';
 
-import ReactFlow, {
-  Node,
-  Edge,
-  Controls,
-  Background,
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ReactFlow,
   useNodesState,
   useEdgesState,
   addEdge,
-  Connection
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  Background,
+  Controls,
+  MiniMap,
+  ConnectionMode,
+} from '@xyflow/react';
 
-import { ModulePalette } from './ModulePalette';
-import { CustomNodes } from './CustomNodes';
+import { NodeAddModal } from './NodeAddModal';
+import { NodeConfigPanel } from './NodeConfigPanel';
+import { GenAIIntentNode, RouterNode, ModuleNode, ResponseNode } from './nodes';
 
-export function WorkflowCanvas({ workflowId }: { workflowId: string }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+const CORE_NODES = [
+  { id: 'genai-node', type: 'genai-intent', position: { x: 200, y: 200 } },
+  { id: 'router-node', type: 'router', position: { x: 600, y: 200 } },
+  { id: 'response-node', type: 'response', position: { x: 1000, y: 200 } },
+];
 
-  // Custom node types
-  const nodeTypes = {
-    start: CustomNodes.StartNode,
-    module: CustomNodes.ModuleNode,
-    decision: CustomNodes.DecisionNode,
-    api: CustomNodes.APINode,
-    response: CustomNodes.ResponseNode,
-    end: CustomNodes.EndNode,
+export function WorkflowCanvas({ workflowId, initialNodes, initialEdges }: WorkflowCanvasProps) {
+  const [nodes, setNodes, onNodesChange] = useNodesState(convert(initialNodes));
+  const [edges, setEdges, onEdgesChange] = useEdgesState(convert(initialEdges));
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // ensure core nodes exist + non-deletable flag
+  useEffect(() => {
+    setNodes((existing) => syncCoreNodes(existing));
+  }, []);
+
+  // auto-save to Supabase
+  useEffect(() => {
+    if (!initialisedRef.current) return;
+    persistWorkflow({ workflowId, nodes, edges });
+  }, [nodes, edges]);
+
+  const handleAddModule = (moduleType: ModuleType) => {
+    setNodes((curr) => [...curr, createModuleNode(moduleType)]);
   };
 
-  const onConnect = (connection: Connection) => {
-    setEdges((eds) => addEdge(connection, eds));
-  };
-
-  const onSave = async () => {
-    // Save workflow definition to database
-    await fetch(`/api/workflows/${workflowId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nodes,
-        edges,
-        updatedAt: new Date().toISOString()
-      })
-    });
+  const onNodesDelete = (nodesToDelete: Node[]) => {
+    // modules can go away; core nodes are restored immediately
+    ...
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Module Palette - drag and drop modules */}
-      <ModulePalette />
-
-      {/* Main canvas */}
-      <div className="flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-        >
-          <Controls />
-          <Background />
-        </ReactFlow>
-
-        {/* Action buttons */}
-        <div className="absolute top-4 right-4 space-x-2">
-          <button onClick={onSave} className="btn btn--primary">
-            Save Workflow
-          </button>
-          <button className="btn btn--secondary">
-            Test Workflow
-          </button>
-        </div>
-      </div>
-    </div>
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onNodesDelete={onNodesDelete}
+      nodeTypes={nodeTypes}
+      connectionMode={ConnectionMode.Loose}
+      deleteKeyCode={['Backspace', 'Delete']}
+    >
+      <Background />
+      <Controls />
+      <MiniMap />
+    </ReactFlow>
+    <button className="add-module">+ Add Module</button>
+    <NodeAddModal ... />
+    <NodeConfigPanel ... />
   );
 }
 ```

@@ -10,35 +10,32 @@ export function ResponseNode(props: NodeProps) {
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-gray-600 to-gray-800 text-white min-w-[200px] ${
-        selected ? 'ring-2 ring-gray-300 ring-offset-2' : ''
+      className={`min-w-[200px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 shadow ${
+        selected ? 'ring-2 ring-slate-400' : ''
       }`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-2 h-2 bg-white rounded-full" />
-        <h3 className="font-bold text-sm">Response</h3>
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-slate-600" />
+        <h3 className="text-sm font-semibold text-slate-900">Response Formatter</h3>
       </div>
-      
-      {/* Input handle */}
+
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         id="response-input"
-        className="bg-gray-300 w-3 h-3"
-        style={{ top: -6 }}
+        className="h-2.5 w-2.5 bg-slate-500"
+        style={{ left: -6 }}
       />
-      
-      <p className="text-xs text-gray-200 mb-2">
-        Formats and returns response
+
+      <p className="mb-2 text-xs text-slate-600">
+        Shapes module output before the user sees it.
       </p>
-      
-      <div className="text-xs bg-white/10 rounded px-2 py-1">
-        Type: {responseType}
-      </div>
-      
+
+      <div className="rounded bg-white px-2 py-1 text-xs text-slate-700">Type: {responseType}</div>
+
       {nodeData.responseConfig && (
-        <div className="text-xs bg-white/10 rounded px-2 py-1 mt-2">
-          Config: {Object.keys(nodeData.responseConfig).length} settings
+        <div className="mt-2 rounded bg-white px-2 py-1 text-xs text-slate-700">
+          Config keys: {Object.keys(nodeData.responseConfig).length}
         </div>
       )}
     </div>

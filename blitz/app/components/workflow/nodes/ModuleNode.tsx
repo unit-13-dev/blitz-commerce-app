@@ -3,42 +3,38 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { NodeData, ModuleType } from '@/app/lib/types/workflow';
 
-const moduleColors: Record<ModuleType, { bg: string; border: string; text: string }> = {
+const moduleStyles: Record<ModuleType, { bg: string; border: string }> = {
   tracking: {
-    bg: 'from-green-500 to-emerald-600',
-    border: 'ring-green-300',
-    text: 'text-green-100'
+    bg: 'bg-blue-100 border-blue-300',
+    border: 'border-blue-300',
   },
   cancellation: {
-    bg: 'from-orange-500 to-red-600',
-    border: 'ring-orange-300',
-    text: 'text-orange-100'
+    bg: 'bg-rose-100 border-rose-300',
+    border: 'border-rose-300',
+  },
+  faq: {
+    bg: 'bg-amber-100 border-amber-300',
+    border: 'border-amber-300',
   },
   refund: {
-    bg: 'from-pink-500 to-rose-600',
-    border: 'ring-pink-300',
-    text: 'text-pink-100'
+    bg: 'bg-emerald-100 border-emerald-300',
+    border: 'border-emerald-300',
   },
-  'modify-order': {
-    bg: 'from-teal-500 to-cyan-600',
-    border: 'ring-teal-300',
-    text: 'text-teal-100'
-  }
 };
 
 const moduleLabels: Record<ModuleType, string> = {
-  tracking: 'Shipment Tracking',
+  tracking: 'Order Tracking',
   cancellation: 'Order Cancellation',
+  faq: 'FAQ Assistant',
   refund: 'Refund Processing',
-  'modify-order': 'Order Modification'
 };
 
 export function ModuleNode(props: NodeProps) {
   const nodeData = (props.data || {}) as NodeData;
   const selected = props.selected;
   const id = props.id;
-  const moduleType = nodeData.moduleType || 'tracking';
-  const colors = moduleColors[moduleType];
+  const moduleType = (nodeData.moduleType || 'tracking') as ModuleType;
+  const styles = moduleStyles[moduleType];
   const label = nodeData.label || moduleLabels[moduleType];
   const moduleConfig = nodeData.moduleConfig;
   const apiConfigs = moduleConfig?.apiConfigs || {};
@@ -46,56 +42,41 @@ export function ModuleNode(props: NodeProps) {
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br ${colors.bg} text-white min-w-[200px] ${
-        selected ? `ring-2 ${colors.border} ring-offset-2` : ''
+      className={`min-w-[220px] rounded-xl border ${styles.border} ${styles.bg} px-4 py-3 shadow ${
+        selected ? 'ring-2 ring-slate-400' : ''
       }`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-2 h-2 bg-white rounded-full" />
-        <h3 className="font-bold text-sm">{label}</h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900">{label}</h3>
+        <span className="text-[10px] uppercase tracking-wide text-slate-500">{moduleType}</span>
       </div>
-      <div className="text-xs text-white/70 mb-1 font-mono">
-        ID: {id}
-      </div>
-      
-      {/* Input handle */}
+
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         id="module-input"
-        className="bg-white w-3 h-3"
-        style={{ top: -6 }}
+        className="h-2.5 w-2.5 bg-slate-500"
+        style={{ left: -6 }}
       />
-      
-      <div className="text-xs space-y-1 mb-2">
-        <div className={`${colors.text} bg-white/10 rounded px-2 py-1`}>
-          Type: {moduleType}
+
+      <div className="space-y-1 text-xs text-slate-700">
+        <div className="rounded bg-white/60 px-2 py-1">APIs Configured: {apiCount}</div>
+        <div className="rounded bg-white/60 px-2 py-1 font-mono text-[10px] uppercase text-slate-500">
+          ID: {id}
         </div>
-        
-        {apiCount > 0 ? (
-          <div className={`${colors.text} bg-white/10 rounded px-2 py-1`}>
-            APIs: {apiCount} configured
-          </div>
-        ) : (
-          <div className="bg-yellow-500/20 rounded px-2 py-1 text-yellow-100">
-            ⚠️ No APIs configured
+        {!nodeData.isConfigured && (
+          <div className="rounded bg-amber-200/70 px-2 py-1 text-amber-800">
+            Configure module details
           </div>
         )}
       </div>
-      
-      {!nodeData.isConfigured && (
-        <div className="text-xs bg-yellow-500/20 rounded px-2 py-1 text-yellow-100">
-          ⚠️ Configuration needed
-        </div>
-      )}
-      
-      {/* Output handle */}
+
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         id="module-output"
-        className="bg-white w-3 h-3"
-        style={{ bottom: -6 }}
+        className="h-2.5 w-2.5 bg-slate-500"
+        style={{ right: -6 }}
       />
     </div>
   );

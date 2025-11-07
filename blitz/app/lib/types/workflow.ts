@@ -9,15 +9,13 @@ export type NodeType =
 export type ModuleType = 
   | 'tracking' 
   | 'cancellation' 
-  | 'refund' 
-  | 'modify-order';
+  | 'faq' 
+  | 'refund';
 
 export type IntentType = 
   | 'TRACK_SHIPMENT' 
   | 'CANCEL_ORDER' 
-  | 'REQUEST_REFUND' 
-  | 'MODIFY_ORDER' 
-  | 'GENERIC_QUERY';
+  | 'FAQ_SUPPORT';
 
 export interface APIConfig {
   name: string;

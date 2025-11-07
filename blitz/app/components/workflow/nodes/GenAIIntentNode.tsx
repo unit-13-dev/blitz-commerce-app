@@ -8,41 +8,40 @@ export function GenAIIntentNode(props: NodeProps) {
   const selected = props.selected;
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-purple-500 to-indigo-600 text-white min-w-[200px] ${
-        selected ? 'ring-2 ring-purple-300 ring-offset-2' : ''
+      className={`min-w-[220px] rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 shadow ${
+        selected ? 'ring-2 ring-indigo-300' : ''
       }`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-        <h3 className="font-bold text-sm">GenAI Intent Layer</h3>
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-indigo-500" />
+        <h3 className="text-sm font-semibold text-slate-900">GenAI Intent Layer</h3>
       </div>
-      
-      <p className="text-xs text-purple-100 mb-3">
-        Analyzes user input and detects intent
+
+      <p className="mb-3 text-xs text-slate-600">
+        Understands customer intent and sends it into the automation router.
       </p>
-      
+
       {nodeData.genAIConfig && (
-        <div className="text-xs bg-white/10 rounded px-2 py-1 mb-2">
+        <div className="mb-2 rounded bg-white px-2 py-1 text-xs text-slate-700">
           <div>Model: {nodeData.genAIConfig.model || 'gpt-4'}</div>
-          {nodeData.genAIConfig.temperature && (
+          {nodeData.genAIConfig.temperature !== undefined && (
             <div>Temp: {nodeData.genAIConfig.temperature}</div>
           )}
         </div>
       )}
-      
+
       {!nodeData.isConfigured && (
-        <div className="text-xs bg-yellow-500/20 rounded px-2 py-1 text-yellow-100">
-          ⚠️ Configuration needed
+        <div className="rounded bg-amber-200/70 px-2 py-1 text-xs text-amber-800">
+          Configure intent detector
         </div>
       )}
-      
-      {/* Single output handle */}
+
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         id="intent-output"
-        className="bg-purple-300 w-3 h-3"
-        style={{ bottom: -6 }}
+        className="h-2.5 w-2.5 bg-indigo-500"
+        style={{ right: -6 }}
       />
     </div>
   );

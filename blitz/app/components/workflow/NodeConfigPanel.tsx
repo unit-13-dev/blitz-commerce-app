@@ -8,6 +8,7 @@ interface NodeConfigPanelProps {
   node: Node;
   allNodes?: Node[];
   onUpdate: (nodeId: string, updates: Partial<NodeData>) => void;
+  onDelete?: (nodeId: string) => void;
   onClose: () => void;
 }
 
@@ -21,7 +22,9 @@ const buttonPrimaryClass =
   'w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-black';
 const buttonSecondaryClass = 'text-slate-600 transition hover:text-slate-900';
 
-export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: NodeConfigPanelProps) {
+const routerIntents: IntentType[] = ['TRACK_SHIPMENT', 'CANCEL_ORDER', 'FAQ_SUPPORT'];
+
+export function NodeConfigPanel({ node, allNodes = [], onUpdate, onDelete, onClose }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<NodeData>(node.data);
   const [newApiName, setNewApiName] = useState('');
 
@@ -35,7 +38,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
       <div className={panelClass}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className={headingClass}>GenAI Intent Configuration</h2>
-          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close">
             ✕
           </button>
         </div>
@@ -66,7 +69,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
               min="0"
               max="1"
               step="0.1"
-              value={config.genAIConfig?.temperature || 0.3}
+              value={config.genAIConfig?.temperature ?? 0.3}
               onChange={(e) =>
                 setConfig({
                   ...config,
@@ -100,7 +103,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
           </div>
 
           <button onClick={handleSave} className={buttonPrimaryClass}>
-            Save Configuration
+            Save configuration
           </button>
         </div>
       </div>
@@ -108,23 +111,24 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
   }
 
   if (node.type === 'router') {
-    const intentMappings: Record<IntentType, string> = (config.routerConfig?.intentMappings || {}) as Record<IntentType, string>;
+    const intentMappings = (config.routerConfig?.intentMappings || {}) as Record<IntentType, string>;
 
     return (
       <div className={panelClass}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className={headingClass}>Router Configuration</h2>
-          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close">
             ✕
           </button>
         </div>
 
         <div className="space-y-5 text-sm">
-          <p className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-            Map each intent to the module that should receive it. Add module nodes to the canvas to see them here.
+          <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Map each detected intent to the module that should handle it. Modules must be on the canvas before
+            they appear in the list.
           </p>
 
-          {(['TRACK_SHIPMENT', 'CANCEL_ORDER', 'REQUEST_REFUND', 'MODIFY_ORDER', 'GENERIC_QUERY'] as IntentType[]).map((intent) => {
+          {routerIntents.map((intent) => {
             const availableModules = allNodes.filter((n) => n.type === 'module');
             const currentMapping = intentMappings[intent] || '';
 
@@ -172,11 +176,11 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                           },
                         })
                       }
-                      placeholder="Enter module node ID"
+                      placeholder="Module node ID"
                       className={inputClass}
                     />
-                    <p className="text-xs text-slate-400">
-                      No module nodes detected. Add a module node and reconnect it to the router.
+                    <p className="text-xs text-gray-500">
+                      No modules found. Add a module node to the canvas first.
                     </p>
                   </>
                 )}
@@ -185,7 +189,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
           })}
 
           <button onClick={handleSave} className={buttonPrimaryClass}>
-            Save Configuration
+            Save configuration
           </button>
         </div>
       </div>
@@ -193,7 +197,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
   }
 
   if (node.type === 'module') {
-    const moduleType = config.moduleType || 'tracking';
+    const moduleType = (config.moduleType || 'tracking') as ModuleType;
     const apiConfigs = config.moduleConfig?.apiConfigs || {};
 
     const addAPI = () => {
@@ -250,28 +254,33 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
       });
     };
 
-    const getRequiredAPIs = (type: ModuleType): string[] => {
-      switch (type) {
-        case 'tracking':
-          return ['Get Orders API', 'Get Tracking Details API'];
-        case 'cancellation':
-          return ['Get Order API', 'Cancel Order API'];
-        case 'refund':
-          return ['Get Order API', 'Process Refund API'];
-        case 'modify-order':
-          return ['Get Order API', 'Update Order API'];
-        default:
-          return [];
-      }
+    const moduleDescriptions: Record<ModuleType, string[]> = {
+      tracking: ['Fetch shipment status', 'Surface tracking milestones to the user'],
+      cancellation: ['Validate cancellation policy', 'Trigger downstream cancellation flows'],
+      faq: ['Answer catalog / policy questions', 'Guide users with quick replies'],
+      refund: ['Initiate refunds with PSP', 'Escalate manual reviews when required'],
     };
 
-    const requiredAPIs = getRequiredAPIs(moduleType);
+    const requiredAPIsMap: Record<ModuleType, string[]> = {
+      tracking: ['Orders API (GET shipping status)', 'Shipment details API'],
+      cancellation: ['Order lookup API', 'Cancellation trigger API'],
+      faq: ['Knowledge base API'],
+      refund: ['Refund initiation API', 'Refund status API'],
+    };
+
+    const requiredAPIs = requiredAPIsMap[moduleType];
+
+    const handleDeleteModule = () => {
+      if (onDelete) {
+        onDelete(node.id);
+      }
+    };
 
     return (
       <div className={panelClass}>
         <div className="mb-6 flex items-center justify-between">
-          <h2 className={headingClass}>{config.label || 'Module Configuration'}</h2>
-          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
+          <h2 className={headingClass}>Module Configuration</h2>
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close">
             ✕
           </button>
         </div>
@@ -283,23 +292,28 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
               type="text"
               value={config.label || ''}
               onChange={(e) => setConfig({ ...config, label: e.target.value })}
-              placeholder={moduleType.replace('-', ' ')}
+              placeholder="Custom name"
               className={inputClass}
             />
           </div>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Required APIs
-            </h3>
-            <ul className="mt-2 space-y-1 text-xs text-slate-300">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Module Purpose</h3>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-gray-600">
+              {moduleDescriptions[moduleType].map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Required APIs</h3>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-gray-600">
               {requiredAPIs.map((api) => {
                 const configured = Boolean(apiConfigs[api]);
                 return (
-                  <li key={api} className="flex items-center gap-2">
-                    <span className={configured ? 'text-emerald-400' : 'text-slate-600'}>
-                      {configured ? '●' : '○'}
-                    </span>
+                  <li key={api} className={configured ? 'text-emerald-600' : 'text-gray-600'}>
+                    {configured ? '✓ ' : ''}
                     {api}
                   </li>
                 );
@@ -309,14 +323,14 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
 
           <div className="space-y-4">
             {Object.entries(apiConfigs).map(([apiName, apiConfig]) => (
-              <div key={apiName} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 shadow">
+              <div key={apiName} className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white">{apiName}</span>
+                  <span className="text-sm font-semibold text-slate-900">{apiName}</span>
                   <button
                     onClick={() => deleteAPI(apiName)}
-                    className="text-xs text-rose-400 transition hover:text-rose-300"
+                    className="text-xs font-medium text-rose-600 transition hover:text-rose-700"
                   >
-                    Delete
+                    Remove
                   </button>
                 </div>
 
@@ -352,7 +366,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
                       type="password"
                       value={apiConfig.apiKey || ''}
                       onChange={(e) => updateAPI(apiName, { apiKey: e.target.value })}
-                      placeholder="*****"
+                      placeholder="••••••"
                       className={inputClass}
                     />
                   </div>
@@ -386,16 +400,28 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
               />
               <button
                 onClick={addAPI}
-                className="rounded-lg border border-indigo-400 px-3 py-2 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/10"
+                type="button"
+                className="rounded-md border border-slate-900 px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-900 hover:text-white"
               >
                 Add
               </button>
             </div>
           </div>
 
-          <button onClick={handleSave} className={buttonPrimaryClass}>
-            Save Configuration
-          </button>
+          <div className="space-y-3">
+            <button onClick={handleSave} className={buttonPrimaryClass}>
+              Save configuration
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={handleDeleteModule}
+                className="w-full rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+              >
+                Remove module
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -406,7 +432,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
       <div className={panelClass}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className={headingClass}>Response Configuration</h2>
-          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close configuration panel">
+          <button onClick={onClose} className={buttonSecondaryClass} aria-label="Close">
             ✕
           </button>
         </div>
@@ -431,7 +457,7 @@ export function NodeConfigPanel({ node, allNodes = [], onUpdate, onClose }: Node
           </div>
 
           <button onClick={handleSave} className={buttonPrimaryClass}>
-            Save Configuration
+            Save configuration
           </button>
         </div>
       </div>

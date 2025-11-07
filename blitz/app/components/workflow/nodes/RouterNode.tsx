@@ -3,78 +3,62 @@
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { NodeData, IntentType } from '@/app/lib/types/workflow';
 
+const routerIntents: IntentType[] = ['TRACK_SHIPMENT', 'CANCEL_ORDER', 'FAQ_SUPPORT'];
+
 export function RouterNode(props: NodeProps) {
   const nodeData = (props.data || {}) as NodeData;
   const selected = props.selected;
   const routerConfig = nodeData.routerConfig;
   const intentMappings = (routerConfig?.intentMappings || {}) as Record<IntentType, string>;
-  
-  const intentTypes: IntentType[] = [
-    'TRACK_SHIPMENT',
-    'CANCEL_ORDER',
-    'REQUEST_REFUND',
-    'MODIFY_ORDER',
-    'GENERIC_QUERY'
-  ];
 
   return (
     <div
-      className={`px-4 py-3 shadow-lg rounded-lg bg-linear-to-br from-blue-500 to-cyan-600 text-white min-w-[220px] ${
-        selected ? 'ring-2 ring-blue-300 ring-offset-2' : ''
+      className={`min-w-[260px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 shadow ${
+        selected ? 'ring-2 ring-slate-400' : ''
       }`}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-2 h-2 bg-white rounded-full" />
-        <h3 className="font-bold text-sm">Router/Orchestrator</h3>
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-slate-700" />
+        <h3 className="text-sm font-semibold text-slate-900">Router / Orchestrator</h3>
       </div>
-      
-      <p className="text-xs text-blue-100 mb-3">
-        Routes intent to appropriate module
+
+      <p className="mb-3 text-xs text-slate-600">
+        Routes each detected intent into its automation module and handles responses.
       </p>
-      
-      {/* Input handle */}
+
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         id="intent-input"
-        className="bg-blue-300 w-3 h-3"
-        style={{ top: -6 }}
+        className="h-2.5 w-2.5 bg-slate-500"
+        style={{ left: -6, top: '50%' }}
       />
-      
-      {/* Output handles for each intent type */}
-      <div className="space-y-1 mt-2">
-        {intentTypes.map((intent, index) => {
-          const isMapped = intentMappings[intent];
-          const handleId = `output-${intent.toLowerCase()}`;
-          
+
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="router-output"
+        className="h-2.5 w-2.5 bg-slate-500"
+        style={{ right: -6, top: '50%' }}
+      />
+
+      <div className="space-y-1">
+        {routerIntents.map((intent) => {
+          const isMapped = Boolean(intentMappings[intent]);
           return (
-            <div key={intent} className="relative">
-              <div className="flex items-center justify-between text-xs bg-white/10 rounded px-2 py-1">
-                <span className="truncate">{intent.replace('_', ' ')}</span>
-                {isMapped ? (
-                  <span className="text-green-300">✓</span>
-                ) : (
-                  <span className="text-yellow-300">⚠</span>
-                )}
-              </div>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={handleId}
-                className="bg-cyan-300 w-2.5 h-2.5"
-                style={{ 
-                  right: -5,
-                  top: `${20 + index * 28}px`
-                }}
-              />
+            <div key={intent} className="flex items-center justify-between rounded bg-white px-2 py-1 text-xs text-slate-700">
+              <span>{intent.replace('_', ' ')}</span>
+              <span className={isMapped ? 'text-emerald-600' : 'text-amber-500'}>
+                {isMapped ? 'Linked' : 'Unlinked'}
+              </span>
             </div>
           );
         })}
       </div>
-      
+
       {!nodeData.isConfigured && (
-        <div className="text-xs bg-yellow-500/20 rounded px-2 py-1 mt-2 text-yellow-100">
-          ⚠️ Configure intent mappings
+        <div className="mt-3 rounded bg-amber-200/70 px-2 py-1 text-xs text-amber-800">
+          Configure intent mappings
         </div>
       )}
     </div>
