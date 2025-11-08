@@ -4,7 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Package, MapPin, CreditCard, Clock, CheckCircle, Truck, XCircle, AlertCircle, Calendar, Timer, RotateCcw, RefreshCw } from "lucide-react";
+import { ArrowLeft, Package, MapPin, CreditCard, Clock, CheckCircle, Truck, XCircle, AlertCircle, Calendar, Timer, RotateCcw, RefreshCw, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +25,7 @@ export default function OrderDetail() {
   const queryClient = useQueryClient();
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
@@ -122,6 +123,51 @@ export default function OrderDetail() {
     return request.status;
   };
 
+  // Cancel order mutation
+  const cancelOrderMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post(`/orders/${id}/cancel`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast({
+        title: "Order cancelled",
+        description: "Your order has been cancelled and refund has been processed.",
+      });
+      setCancelDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to cancel order",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCancelOrder = () => {
+    setCancelDialogOpen(true);
+  };
+
+  const confirmCancel = () => {
+    cancelOrderMutation.mutate();
+  };
+
+  // Check if order can be cancelled
+  const canCancelOrder = () => {
+    if (!order) return false;
+    const status = order.status?.toLowerCase();
+    // Can cancel if: pending, confirmed, or dispatched (before shipping)
+    const cancellableStatuses = ['pending', 'confirmed', 'dispatched'];
+    if (!cancellableStatuses.includes(status)) return false;
+    
+    // Check if all products are refundable
+    const allRefundable = order.items?.every((item: any) => item.product?.isReturnable);
+    return allRefundable;
+  };
+
   if (isLoading) {
     return (
         <div className="min-h-screen">
@@ -182,7 +228,7 @@ export default function OrderDetail() {
                     case 'delivered':
                       return <Badge variant="default" className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Delivered</Badge>;
                     case 'cancelled':
-                      return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Cancelled</Badge>;
+                      return <Badge variant="destructive"><Ban className="w-3 h-3 mr-1" />Cancelled</Badge>;
                     case 'rejected':
                       return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
                     case 'return_requested':
@@ -204,6 +250,41 @@ export default function OrderDetail() {
                 })()}
               </div>
               
+              {/* Cancel Order Button */}
+              {canCancelOrder() && (
+                <div className="mt-4">
+                  <Button
+                    variant="destructive"
+                    onClick={handleCancelOrder}
+                    className="w-full sm:w-auto"
+                  >
+                    <Ban className="w-4 h-4 mr-2" />
+                    Cancel Order
+                  </Button>
+                </div>
+              )}
+
+              {/* Cancellation Info */}
+              {order.status === 'cancelled' && order.cancelledAt && (
+                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Ban className="w-5 h-5 text-red-600" />
+                    <h3 className="font-semibold text-red-900">Order Cancelled</h3>
+                  </div>
+                  <p className="text-sm text-red-800">
+                    Cancelled on {new Date(order.cancelledAt).toLocaleString()}
+                  </p>
+                  {order.cancellationReason && (
+                    <p className="text-sm text-red-700 mt-2">
+                      <strong>Reason:</strong> {order.cancellationReason}
+                    </p>
+                  )}
+                  <p className="text-sm text-red-800 mt-2">
+                    Refund has been processed. Amount will be credited to your account.
+                  </p>
+                </div>
+              )}
+
               {/* Delivery Timeline */}
               {order.expectedDeliveryDate && (() => {
                 const expected = new Date(order.expectedDeliveryDate);
@@ -518,6 +599,45 @@ export default function OrderDetail() {
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     {replaceRequestMutation.isPending ? 'Submitting...' : 'Submit Request'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Cancel Order Dialog */}
+            <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cancel Order</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to cancel this order? This action cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800 font-medium mb-2">
+                      What happens when you cancel:
+                    </p>
+                    <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                      <li>Order will be cancelled immediately</li>
+                      <li>Refund of ₹{typeof order.totalAmount === 'string' 
+                        ? parseFloat(order.totalAmount).toFixed(2) 
+                        : order.totalAmount.toFixed(2)} will be processed</li>
+                      <li>Product stock will be restored</li>
+                      <li>You will receive a confirmation email</li>
+                    </ul>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
+                    Keep Order
+                  </Button>
+                  <Button
+                    onClick={confirmCancel}
+                    disabled={cancelOrderMutation.isPending}
+                    variant="destructive"
+                  >
+                    {cancelOrderMutation.isPending ? 'Cancelling...' : 'Yes, Cancel Order'}
                   </Button>
                 </DialogFooter>
               </DialogContent>

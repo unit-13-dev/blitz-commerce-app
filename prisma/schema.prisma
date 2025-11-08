@@ -288,6 +288,8 @@ model Order {
   expectedDeliveryDate DateTime?
   rejectedAt          DateTime?
   rejectionReason     String?
+  cancelledAt         DateTime?
+  cancellationReason  String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 

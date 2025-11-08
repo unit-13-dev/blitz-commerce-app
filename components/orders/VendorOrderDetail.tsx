@@ -8,6 +8,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +26,7 @@ import {
   User,
   Calendar,
   Timer,
+  Ban,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -40,6 +43,8 @@ interface Order {
   shippedAt?: string;
   deliveredAt?: string;
   expectedDeliveryDate?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
   rejectedAt?: string;
   rejectionReason?: string;
   user: {
@@ -66,6 +71,8 @@ interface VendorOrderDetailProps {
 const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps) => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,6 +147,39 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const { data } = await apiClient.post(`/vendor/orders/${order.id}/cancel`, {
+        cancellationReason: reason,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Success',
+        description: 'Order cancelled successfully. Refund has been processed for the customer.',
+      });
+      onUpdate();
+      setShowCancelDialog(false);
+      setCancelReason('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to cancel order',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Check if order can be cancelled by vendor
+  const canCancelOrder = () => {
+    const status = order.status?.toLowerCase();
+    // Can cancel if: pending, confirmed, or dispatched (before shipping)
+    const cancellableStatuses = ['pending', 'confirmed', 'dispatched'];
+    return cancellableStatuses.includes(status);
+  };
+
   const getStatusBadge = (status: string) => {
     const statusLower = status.toLowerCase();
     switch (statusLower) {
@@ -154,7 +194,7 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
       case 'delivered':
         return <Badge variant="default" className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Delivered</Badge>;
       case 'cancelled':
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Cancelled</Badge>;
+        return <Badge variant="destructive"><Ban className="w-3 h-3 mr-1" />Cancelled</Badge>;
       case 'rejected':
         return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       default:
@@ -326,6 +366,17 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
                     <span>{new Date(order.deliveredAt).toLocaleString()}</span>
                   </div>
                 )}
+                {order.cancelledAt && (
+                  <div className="flex justify-between">
+                    <span className="text-red-600">Cancelled</span>
+                    <span>{new Date(order.cancelledAt).toLocaleString()}</span>
+                  </div>
+                )}
+                {order.cancellationReason && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">Cancellation Reason: {order.cancellationReason}</p>
+                  </div>
+                )}
                 {order.rejectedAt && (
                   <div className="flex justify-between">
                     <span className="text-red-600">Rejected</span>
@@ -334,20 +385,20 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
                 )}
                 {order.rejectionReason && (
                   <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-                    <p className="text-sm text-red-700">Reason: {order.rejectionReason}</p>
+                    <p className="text-sm text-red-700">Rejection Reason: {order.rejectionReason}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t">
+            <div className="flex gap-3 pt-4 border-t flex-wrap">
               {status === 'pending' && (
                 <>
                   <Button
                     onClick={() => confirmMutation.mutate()}
                     disabled={confirmMutation.isPending}
-                    className="flex-1"
+                    className="flex-1 min-w-[120px]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Confirm Order
@@ -355,18 +406,28 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
                   <Button
                     variant="destructive"
                     onClick={() => setShowRejectDialog(true)}
-                    className="flex-1"
+                    className="flex-1 min-w-[120px]"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
                     Reject Order
                   </Button>
                 </>
               )}
+              {canCancelOrder() && status !== 'pending' && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowCancelDialog(true)}
+                  className="flex-1 min-w-[120px]"
+                >
+                  <Ban className="w-4 h-4 mr-2" />
+                  Cancel Order
+                </Button>
+              )}
               {nextStatus && status !== 'delivered' && status !== 'rejected' && status !== 'cancelled' && (
                 <Button
                   onClick={() => updateStatusMutation.mutate(nextStatus)}
                   disabled={updateStatusMutation.isPending}
-                  className="flex-1"
+                  className="flex-1 min-w-[120px]"
                 >
                   {nextStatus === 'dispatched' && <Truck className="w-4 h-4 mr-2" />}
                   {nextStatus === 'shipped' && <Package className="w-4 h-4 mr-2" />}
@@ -374,7 +435,7 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
                   Mark as {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
                 </Button>
               )}
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} className="min-w-[100px]">
                 Close
               </Button>
             </div>
@@ -421,6 +482,59 @@ const VendorOrderDetail = ({ order, onClose, onUpdate }: VendorOrderDetailProps)
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Cancel Dialog */}
+      {showCancelDialog && (
+        <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cancel Order</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this order? This will refund the customer and restore product stock.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 font-medium mb-2">
+                  What happens when you cancel:
+                </p>
+                <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                  <li>Order will be cancelled immediately</li>
+                  <li>Customer will receive a full refund</li>
+                  <li>Product stock will be restored</li>
+                  <li>Customer will be notified via email</li>
+                </ul>
+              </div>
+              <div>
+                <Label htmlFor="cancel-reason">Cancellation Reason (Optional)</Label>
+                <Textarea
+                  id="cancel-reason"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="E.g., Out of stock, Unable to fulfill order, etc."
+                  rows={3}
+                  className="mt-2"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setShowCancelDialog(false);
+                setCancelReason('');
+              }}>
+                Keep Order
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => cancelMutation.mutate(cancelReason)}
+                disabled={cancelMutation.isPending}
+              >
+                {cancelMutation.isPending ? 'Cancelling...' : 'Yes, Cancel Order'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

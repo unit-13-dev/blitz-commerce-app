@@ -14,7 +14,7 @@ import { Heart, MessageCircle, Share2, ShoppingCart, User, Plus } from 'lucide-r
 import { useToast } from '@/hooks/use-toast';
 
 const UserDashboard = () => {
-  const { profile, updateProfile } = useAuth();
+  const { profile } = useAuth();
   const { toast } = useToast();
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
