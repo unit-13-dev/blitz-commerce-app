@@ -6,7 +6,7 @@ import { UserRole } from "@prisma/client";
 export async function GET(request: Request) {
   try {
     // Require admin role
-    await requireRole('admin' as UserRole, request);
+    await requireRole(UserRole.admin);
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");

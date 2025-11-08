@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
 import { apiClient } from "@/lib/api-client";
 import HighlightProductCard from "@/components/HighlightProductCard";
 
@@ -42,8 +41,7 @@ export default function Wishlist() {
   });
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen">
+    <div className="min-h-screen">
         <Header />
         <Layout>
           <div className="max-w-7xl mx-auto px-4 py-8 mt-20">
@@ -86,7 +84,6 @@ export default function Wishlist() {
         </Layout>
         <Footer />
       </div>
-    </ProtectedRoute>
   );
 }
 

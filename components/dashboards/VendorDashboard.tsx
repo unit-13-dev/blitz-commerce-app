@@ -11,10 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Package, FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Package, FileText, AlertCircle, CheckCircle, Clock, ShoppingBag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import KYCForm from '@/components/KYCForm';
 import ProductForm from '@/components/ProductForm';
+import VendorOrderList from '@/components/orders/VendorOrderList';
 import Header from '../Header';
 
 const VendorDashboard = () => {
@@ -50,6 +51,29 @@ const VendorDashboard = () => {
 
   const products = productsResponse || [];
 
+  const { data: ordersData } = useQuery({
+    queryKey: ['vendor-orders-count', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const { data } = await apiClient.get('/vendor/orders', {
+        params: { status: 'all', limit: 1 },
+      });
+      return data.data;
+    },
+    enabled: !!profile?.id,
+  });
+
+  const orderCounts = ordersData?.counts || {
+    all: 0,
+    pending: 0,
+    confirmed: 0,
+    dispatched: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    rejected: 0,
+  };
+
   const getKYCStatusBadge = () => {
     if (!kycData) return <Badge variant="secondary">Not Submitted</Badge>;
     
@@ -74,14 +98,18 @@ const VendorDashboard = () => {
         <h1 className="text-3xl font-bold mb-8">Vendor Dashboard</h1>
         
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="orders">
+              <ShoppingBag className="w-4 h-4 mr-2" />
+              Orders
+            </TabsTrigger>
             <TabsTrigger value="kyc">KYC Verification</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">KYC Status</CardTitle>
@@ -108,6 +136,19 @@ const VendorDashboard = () => {
                   <p className="text-3xl font-bold">
                     {products?.filter((p: any) => p.isActive).length || 0}
                   </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5" />
+                    Pending Orders
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-bold text-yellow-600">{orderCounts.pending}</p>
+                  <p className="text-sm text-gray-600 mt-1">Total: {orderCounts.all}</p>
                 </CardContent>
               </Card>
             </div>
@@ -169,6 +210,10 @@ const VendorDashboard = () => {
                 )} */}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="orders">
+            {profile?.id && <VendorOrderList vendorId={profile.id} />}
           </TabsContent>
 
           <TabsContent value="kyc">

@@ -56,7 +56,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await requireRole('admin' as UserRole, request);
+    const admin = await requireRole(UserRole.admin);
     const body = await request.json();
     const { status, rejectionReason } = body;
 

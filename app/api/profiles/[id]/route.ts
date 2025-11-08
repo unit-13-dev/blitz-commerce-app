@@ -10,13 +10,37 @@ export async function GET(
     const { id } = await params;
     const profile = await prisma.profile.findUnique({
       where: { id },
+      include: {
+        _count: {
+          select: {
+            posts: {
+              where: {
+                status: 'published',
+              },
+            },
+            followers: true,
+            follows: true,
+          },
+        },
+      },
     });
 
     if (!profile) {
       return ApiResponseHandler.notFound("Profile not found");
     }
 
-    return ApiResponseHandler.success({ profile }, "Profile fetched successfully");
+    // Add counts to profile object
+    const profileWithCounts = {
+      ...profile,
+      posts_count: profile._count.posts,
+      followers_count: profile._count.followers,
+      following_count: profile._count.follows,
+    };
+
+    // Remove _count from response
+    const { _count, ...profileData } = profileWithCounts;
+
+    return ApiResponseHandler.success({ profile: profileData }, "Profile fetched successfully");
   } catch (error: any) {
     console.error("Profile GET error", error);
     return ApiResponseHandler.error("Failed to load profile", 500, error);

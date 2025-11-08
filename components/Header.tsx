@@ -15,6 +15,7 @@ import { Search } from "lucide-react";
 const navLinks = [
   { href: "/feed", label: "Feed" },
   { href: "/products", label: "Products" },
+  { href: "/orders", label: "Orders" },
 ];
 
 export default function Header() {

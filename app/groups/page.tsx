@@ -9,7 +9,6 @@ import { Search, Plus, Users } from "lucide-react";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
 import { apiClient } from "@/lib/api-client";
 import { useState } from "react";
 import CreateGroupModal from "@/components/CreateGroupModal";
@@ -36,8 +35,7 @@ export default function GroupsPage() {
   );
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen">
+    <div className="min-h-screen">
         <Header />
         <Layout>
           <div className="max-w-7xl mx-auto px-4 py-8 mt-20">
@@ -108,7 +106,6 @@ export default function GroupsPage() {
           />
         )}
       </div>
-    </ProtectedRoute>
   );
 }
 

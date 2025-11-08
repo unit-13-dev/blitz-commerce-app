@@ -26,7 +26,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
   const { profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [form, setForm] = useState({
     business_name: existingData?.business_name || '',
     ho_address: existingData?.ho_address || '',
@@ -37,53 +37,38 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
     tan_number: existingData?.tan_number || '',
     turnover_over_5cr: existingData?.turnover_over_5cr || false,
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(!existingData || existingData.status === 'rejected');
   const [gstDocument, setGstDocument] = useState<File | null>(null);
   const [panDocument, setPanDocument] = useState<File | null>(null);
   const [gstPreview, setGstPreview] = useState<string | null>(existingData?.gst_url || null);
   const [panPreview, setPanPreview] = useState<string | null>(existingData?.pan_url || null);
-  const [uploadErrors, setUploadErrors] = useState<{gst?: string; pan?: string}>({});
-  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+  const [uploadErrors, setUploadErrors] = useState<{ gst?: string; pan?: string }>({});
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
   // File validation function
   const validateFile = (file: File): string | null => {
     const maxSize = 5 * 1024 * 1024; // 5MB
     const allowedTypes = ['image/png', 'image/jpeg', 'application/pdf'];
-    
+
     if (file.size > maxSize) {
       return 'File size must be less than 5MB';
     }
-    
+
     if (!allowedTypes.includes(file.type)) {
       return 'Only PNG, JPEG, and PDF files are allowed';
     }
-    
+
     return null;
   };
 
   const uploadDocument = async (file: File): Promise<string> => {
     if (!profile?.id) throw new Error('User not authenticated');
-    
+
     const folder = `kyc-documents/${profile.id}`;
-    const { data: { timestamp, signature, apiKey, cloudName } } = await apiClient.post('/media/signature', { folder });
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('timestamp', timestamp.toString());
-    formData.append('signature', signature);
-    formData.append('api_key', apiKey);
-    formData.append('folder', folder);
-
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) throw new Error('Failed to upload document');
-    const json = await response.json();
-    return json.secure_url;
+    const { uploadToCloudinary: uploadFile } = await import('@/lib/cloudinary-client');
+    return uploadFile(file, folder);
   };
 
   const checkDuplicates = async () => {
@@ -113,7 +98,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
         setUploadErrors(prev => ({ ...prev, gst: error }));
         return;
       }
-      
+
       setUploadErrors(prev => ({ ...prev, gst: undefined }));
       setGstDocument(file);
       setGstPreview(URL.createObjectURL(file));
@@ -129,7 +114,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
         setUploadErrors(prev => ({ ...prev, pan: error }));
         return;
       }
-      
+
       setUploadErrors(prev => ({ ...prev, pan: undefined }));
       setPanDocument(file);
       setPanPreview(URL.createObjectURL(file));
@@ -159,27 +144,27 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
   const submitKYCMutation = useMutation({
     mutationFn: async (formData: typeof form) => {
       if (!profile?.id) throw new Error('User not authenticated');
-      
+
       const isUnique = await checkDuplicates();
       if (!isUnique) {
         throw new Error('Duplicate values found. Please check the form.');
       }
-      
+
       if (!existingData && (!gstDocument || !panDocument)) {
         throw new Error('Both GST and PAN documents are required');
       }
-      
+
       let gstUrl = gstPreview;
       let panUrl = panPreview;
-      
+
       if (gstDocument) {
         gstUrl = await uploadDocument(gstDocument);
       }
-      
+
       if (panDocument) {
         panUrl = await uploadDocument(panDocument);
       }
-      
+
       const { data } = await apiClient.post('/kyc', {
         businessName: formData.business_name,
         hoAddress: formData.ho_address,
@@ -199,7 +184,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
       queryClient.invalidateQueries({ queryKey: ['kyc', profile?.id] });
       toast({
         title: existingData ? 'KYC Resubmitted' : 'KYC Submitted',
-        description: existingData 
+        description: existingData
           ? 'Your KYC has been resubmitted for review. This is version ' + (existingData.version + 1) + ' of your submission.'
           : 'Your KYC verification request has been submitted for review.',
       });
@@ -246,15 +231,15 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">KYC Verification Status</h3>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => setShowForm(true)}
           >
             Edit KYC
           </Button>
         </div>
-        
+
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
@@ -267,8 +252,8 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
               )}
               <div>
                 <h4 className="font-semibold">
-                  {existingData.status === 'approved' ? 'Verified' : 
-                   existingData.status === 'pending' ? 'Pending Approval' : 'Rejected'}
+                  {existingData.status === 'approved' ? 'Verified' :
+                    existingData.status === 'pending' ? 'Pending Approval' : 'Rejected'}
                 </h4>
                 <p className="text-sm text-gray-600">
                   Business Name: {existingData.business_name}
@@ -278,7 +263,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
                 {existingData.status}
               </Badge>
             </div>
-            
+
             {/* KYC Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
               <div>
@@ -301,10 +286,10 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
                 <Label className="text-sm font-medium text-gray-600">TAN Number</Label>
                 <p className="font-semibold">{existingData.tan_number}</p>
               </div>
-                             <div>
-                 <Label className="text-sm font-medium text-gray-600">Turnover &gt; ₹5 Cr</Label>
-                 <p className="font-semibold">{existingData.turnover_over_5cr ? 'Yes' : 'No'}</p>
-               </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Turnover &gt; ₹5 Cr</Label>
+                <p className="font-semibold">{existingData.turnover_over_5cr ? 'Yes' : 'No'}</p>
+              </div>
               <div className="md:col-span-2">
                 <Label className="text-sm font-medium text-gray-600">Head Office Address</Label>
                 <p className="font-semibold">{existingData.ho_address}</p>
@@ -325,7 +310,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
 
   // If form is hidden and we're in inline mode, show button to show form
   if (!showForm && isInline) {
-  return (
+    return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">KYC Verification Status</h3>
@@ -333,7 +318,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             Complete KYC
           </Button>
         </div>
-        
+
         <Card>
           <CardContent className="text-center py-8">
             <AlertCircle className="w-12 h-12 mx-auto text-orange-400 mb-4" />
@@ -364,22 +349,22 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
       {/* Business Information */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-900">Business Information</h3>
-        
-          <div>
-            <Label htmlFor="business_name">Business Name *</Label>
-            <Input 
-              id="business_name"
-              name="business_name"
-              value={form.business_name}
-              onChange={handleChange}
-              placeholder="Your Business Name"
-              required
-            />
-          </div>
-          
-          <div>
+
+        <div>
+          <Label htmlFor="business_name">Business Name *</Label>
+          <Input
+            id="business_name"
+            name="business_name"
+            value={form.business_name}
+            onChange={handleChange}
+            placeholder="Your Business Name"
+            required
+          />
+        </div>
+
+        <div>
           <Label htmlFor="ho_address">Head Office Address *</Label>
-          <Textarea 
+          <Textarea
             id="ho_address"
             name="ho_address"
             value={form.ho_address}
@@ -388,22 +373,22 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             required
           />
         </div>
-        
+
         <div>
           <Label htmlFor="warehouse_address">Warehouse Address *</Label>
-            <Textarea 
+          <Textarea
             id="warehouse_address"
             name="warehouse_address"
             value={form.warehouse_address}
-              onChange={handleChange}
+            onChange={handleChange}
             placeholder="Complete Warehouse Address"
-              required
-            />
-          </div>
-          
-          <div>
+            required
+          />
+        </div>
+
+        <div>
           <Label htmlFor="phone_number">Business Phone Number *</Label>
-          <Input 
+          <Input
             id="phone_number"
             name="phone_number"
             value={form.phone_number}
@@ -424,14 +409,14 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
       {/* Tax Information */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-900">Tax Information</h3>
-        
+
         <div>
           <Label htmlFor="gst_number">GST Number *</Label>
-            <Input 
-              id="gst_number"
-              name="gst_number"
-              value={form.gst_number}
-              onChange={handleChange}
+          <Input
+            id="gst_number"
+            name="gst_number"
+            value={form.gst_number}
+            onChange={handleChange}
             placeholder="22AAAAA0000A1Z5"
             pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}"
             required
@@ -443,10 +428,10 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             <p className="text-sm text-red-500 mt-1">{validationErrors.gst_number}</p>
           )}
         </div>
-        
+
         <div>
           <Label htmlFor="pan_number">PAN Number *</Label>
-          <Input 
+          <Input
             id="pan_number"
             name="pan_number"
             value={form.pan_number}
@@ -454,22 +439,22 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             placeholder="ABCDE1234F"
             pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
             required
-            />
-            <p className="text-sm text-gray-500 mt-1">
+          />
+          <p className="text-sm text-gray-500 mt-1">
             Format: ABCDE1234F (10 characters)
-            </p>
+          </p>
           {validationErrors.pan_number && (
             <p className="text-sm text-red-500 mt-1">{validationErrors.pan_number}</p>
           )}
-          </div>
-          
-          <div>
+        </div>
+
+        <div>
           <Label htmlFor="tan_number">TAN Number *</Label>
-            <Input 
+          <Input
             id="tan_number"
             name="tan_number"
             value={form.tan_number}
-              onChange={handleChange}
+            onChange={handleChange}
             placeholder="ABCD12345E"
             pattern="[A-Z]{4}[0-9]{5}[A-Z]{1}"
             required
@@ -481,7 +466,7 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             <p className="text-sm text-red-500 mt-1">{validationErrors.tan_number}</p>
           )}
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <Switch
             id="turnover_over_5cr"
@@ -503,9 +488,8 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             <CardContent className="p-0">
               <div
                 {...getGstRootProps()}
-                className={`p-6 cursor-pointer transition-colors ${
-                  isGstDragActive ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
-                }`}
+                className={`p-6 cursor-pointer transition-colors ${isGstDragActive ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
+                  }`}
               >
                 <input {...getGstInputProps()} />
                 <div className="text-center space-y-2">
@@ -565,9 +549,8 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             <CardContent className="p-0">
               <div
                 {...getPanRootProps()}
-                className={`p-6 cursor-pointer transition-colors ${
-                  isPanDragActive ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
-                }`}
+                className={`p-6 cursor-pointer transition-colors ${isPanDragActive ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
+                  }`}
               >
                 <input {...getPanInputProps()} />
                 <div className="text-center space-y-2">
@@ -619,25 +602,25 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
             </div>
           )}
         </div>
-          </div>
-          
+      </div>
+
       <div className="flex gap-2">
         {isInline && (
-          <Button 
-            type="button" 
-            variant="outline" 
+          <Button
+            type="button"
+            variant="outline"
             onClick={() => setShowForm(false)}
           >
             Cancel
           </Button>
         )}
         {onClose && (
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
         )}
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting...' : existingData ? 'Resubmit' : 'Submit'}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Submitting...' : existingData ? 'Resubmit' : 'Submit'}
         </Button>
       </div>
     </form>
@@ -663,8 +646,8 @@ const KYCForm: React.FC<KYCFormProps> = ({ onClose, existingData, isInline = fal
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">KYC Verification</h3>
           {existingData && existingData.status !== 'rejected' && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setShowForm(false)}
             >

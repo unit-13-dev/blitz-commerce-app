@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
 import CartProductCard from "@/components/CartProductCard";
 import { apiClient } from "@/lib/api-client";
 
@@ -93,7 +92,6 @@ const Cart = () => {
   };
 
   return (
-    <ProtectedRoute>
       <div className="min-h-screen">
         <Header />
         <Layout>
@@ -187,7 +185,6 @@ const Cart = () => {
         </Layout>
         <Footer />
       </div>
-    </ProtectedRoute>
   );
 };
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth-helpers";
+import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
@@ -9,11 +9,20 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const userId = searchParams.get("userId");
     const skip = page * limit;
+    const currentUser = await getCurrentUser();
 
     const where: any = {
       status: "published",
-      privacy: "public",
     };
+
+    // If not authenticated, only show public posts
+    // If authenticated, show public posts or posts from users they follow
+    if (!currentUser) {
+      where.privacy = "public";
+    } else if (userId && userId !== currentUser.id) {
+      // When viewing another user's profile, show their public posts
+      where.privacy = "public";
+    }
 
     if (userId) {
       where.userId = userId;
@@ -75,7 +84,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireAuth();
     const body = await request.json();
     const {
       content,

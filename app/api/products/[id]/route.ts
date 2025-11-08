@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
+import { validateCategory } from "@/lib/product-utils";
 
 export async function GET(
   _request: Request,
@@ -74,13 +75,72 @@ export async function PUT(
       description,
       price,
       imageUrl,
-      category,
+      category, // Enum category (single)
       stockQuantity,
       isActive,
       groupOrderEnabled,
       images,
-      categories,
+      categories, // Dynamic categories (array of category IDs)
     } = body;
+
+    // Validate and convert enum category if provided (optional)
+    let validatedCategory = undefined;
+    let enumCategoryValue: string | null = null;
+    let dynamicCategoryIds: string[] = [];
+
+    if (category !== undefined) {
+      if (category === null || category === "") {
+        validatedCategory = null;
+      } else {
+        try {
+          validatedCategory = validateCategory(category);
+        } catch (error: any) {
+          return ApiResponseHandler.badRequest(error.message);
+        }
+      }
+    }
+
+    // Validate categories array if provided (optional)
+    if (categories && Array.isArray(categories)) {
+      if (categories.length === 0) {
+        // Empty array means clear all categories
+        dynamicCategoryIds = [];
+      } else {
+        // UUID pattern for dynamic categories (8-4-4-4-12 hexadecimal characters)
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        for (const cat of categories) {
+          if (typeof cat !== 'string') {
+            continue; // Skip invalid entries
+          }
+
+          // Check if it's a UUID (dynamic category)
+          if (uuidPattern.test(cat)) {
+            dynamicCategoryIds.push(cat);
+            continue;
+          }
+
+          // Check if it's a valid enum category
+          try {
+            const validated = validateCategory(cat);
+            if (validated) {
+              // If it's a valid enum category, use it as the primary category
+              // Only one enum category allowed, so take the first one found
+              if (!enumCategoryValue) {
+                enumCategoryValue = validated;
+              }
+            }
+          } catch {
+            // Not a valid enum category, but also not a UUID
+            // This might be an invalid category ID, but we'll include it anyway
+            console.warn(`Unknown category format: ${cat}`);
+          }
+        }
+      }
+    }
+
+    // Use enum category from either the category field or from categories array
+    const finalEnumCategory = validatedCategory !== undefined ? validatedCategory : (enumCategoryValue || undefined);
 
     // Delete old images if new ones provided
     if (images) {
@@ -90,7 +150,7 @@ export async function PUT(
     }
 
     // Delete old category mappings if new ones provided
-    if (categories) {
+    if (categories !== undefined) {
       await prisma.productCategoryMapping.deleteMany({
         where: { productId: id },
       });
@@ -103,7 +163,7 @@ export async function PUT(
         description,
         price: price ? parseFloat(price) : undefined,
         imageUrl,
-        category,
+        category: finalEnumCategory as any, // Cast to enum type
         stockQuantity: stockQuantity ? parseInt(stockQuantity) : undefined,
         isActive,
         groupOrderEnabled,
@@ -116,12 +176,14 @@ export async function PUT(
               })),
             }
           : undefined,
-        categories: categories
+        categories: dynamicCategoryIds.length > 0
           ? {
-              create: categories.map((catId: string) => ({
+              create: dynamicCategoryIds.map((catId: string) => ({
                 category: { connect: { id: catId } },
               })),
             }
+          : categories !== undefined && dynamicCategoryIds.length === 0
+          ? { set: [] } // Clear all categories if empty array provided
           : undefined,
       },
       include: {

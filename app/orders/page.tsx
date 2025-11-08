@@ -8,7 +8,6 @@ import { ArrowLeft, Package, CheckCircle } from "lucide-react";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
 import { apiClient } from "@/lib/api-client";
 
 export default function Orders() {
@@ -18,13 +17,13 @@ export default function Orders() {
   const { data: ordersData, isLoading } = useQuery({
     queryKey: ['orders', user?.id],
     queryFn: async () => {
-      const { data } = await apiClient.get('/orders');
-      return data;
+      const response = await apiClient.get('/orders');
+      return response.data;
     },
     enabled: !!user?.id,
   });
 
-  const orders = ordersData?.orders || [];
+  const orders = ordersData?.data?.orders || ordersData?.orders || [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -42,8 +41,7 @@ export default function Orders() {
   };
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen">
+    <div className="min-h-screen">
         <Header />
         <Layout>
           <div className="max-w-7xl mx-auto px-4 py-8 mt-20">
@@ -139,7 +137,6 @@ export default function Orders() {
         </Layout>
         <Footer />
       </div>
-    </ProtectedRoute>
   );
 }
 

@@ -77,7 +77,11 @@ export default function UserProfilePage() {
             isOwnProfile={isOwnProfile}
           />
 
-          <SocialProfileTabs profileUserId={userId} isOwnProfile={isOwnProfile} />
+          <SocialProfileTabs 
+            profileUserId={userId} 
+            isOwnProfile={isOwnProfile}
+            profileRole={profile?.role}
+          />
         </div>
       </Layout>
       <Footer />

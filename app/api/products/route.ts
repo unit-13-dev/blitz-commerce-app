@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
+import { validateCategory } from "@/lib/product-utils";
 
 export async function GET(request: Request) {
   try {
@@ -9,6 +10,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "12");
     const search = searchParams.get("search") || "";
     const categoryId = searchParams.get("categoryId");
+    const categoryEnum = searchParams.get("category"); // Filter by enum category
     const skip = page * limit;
 
     let where: any = { isActive: true };
@@ -17,6 +19,20 @@ export async function GET(request: Request) {
       where.name = { contains: search, mode: "insensitive" };
     }
 
+    // Filter by enum category if provided
+    if (categoryEnum && categoryEnum !== "all") {
+      try {
+        const validatedCategory = validateCategory(categoryEnum);
+        if (validatedCategory) {
+          where.category = validatedCategory;
+        }
+      } catch (error) {
+        // Invalid category enum, ignore it
+        console.warn(`Invalid category enum: ${categoryEnum}`);
+      }
+    }
+
+    // Filter by dynamic category (ProductCategory table) if provided
     if (categoryId && categoryId !== "all") {
       const productIds = await prisma.productCategoryMapping.findMany({
         where: { categoryId },
@@ -84,14 +100,67 @@ export async function POST(request: Request) {
       description,
       price,
       imageUrl,
-      category,
+      category, // Enum category (single)
       stockQuantity,
       isActive,
       groupOrderEnabled,
       images,
-      categories,
+      categories, // Dynamic categories (array of category IDs)
       discountTiers,
     } = body;
+
+    // Validate and convert enum category if provided (optional)
+    let validatedCategory = null;
+    if (category) {
+      try {
+        validatedCategory = validateCategory(category);
+      } catch (error: any) {
+        return ApiResponseHandler.badRequest(error.message);
+      }
+    }
+
+    // Validate categories array if provided (optional)
+    // Categories can be either enum category IDs (strings like "electronics") or dynamic category IDs (UUIDs)
+    // We'll filter them when creating the relationships
+    let dynamicCategoryIds: string[] = [];
+    let enumCategoryValue: string | null = null;
+
+    if (categories && Array.isArray(categories) && categories.length > 0) {
+      // UUID pattern for dynamic categories (8-4-4-4-12 hexadecimal characters)
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      for (const cat of categories) {
+        if (typeof cat !== 'string') {
+          continue; // Skip invalid entries
+        }
+
+        // Check if it's a UUID (dynamic category)
+        if (uuidPattern.test(cat)) {
+          dynamicCategoryIds.push(cat);
+          continue;
+        }
+
+        // Check if it's a valid enum category
+        try {
+          const validated = validateCategory(cat);
+          if (validated) {
+            // If it's a valid enum category, use it as the primary category
+            // Only one enum category allowed, so take the first one found
+            if (!enumCategoryValue) {
+              enumCategoryValue = validated;
+            }
+          }
+        } catch {
+          // Not a valid enum category, but also not a UUID
+          // This might be an invalid category ID, but we'll include it anyway
+          // The database will handle the error if it's invalid
+          console.warn(`Unknown category format: ${cat}`);
+        }
+      }
+    }
+
+    // Use enum category from either the category field or from categories array
+    const finalEnumCategory = validatedCategory || enumCategoryValue;
 
     const product = await prisma.product.create({
       data: {
@@ -100,7 +169,7 @@ export async function POST(request: Request) {
         description,
         price: parseFloat(price),
         imageUrl,
-        category,
+        category: finalEnumCategory as any, // Cast to enum type
         stockQuantity: parseInt(stockQuantity) || 0,
         isActive: isActive !== false,
         groupOrderEnabled: groupOrderEnabled || false,
@@ -113,9 +182,9 @@ export async function POST(request: Request) {
               })),
             }
           : undefined,
-        categories: categories
+        categories: dynamicCategoryIds.length > 0
           ? {
-              create: categories.map((catId: string) => ({
+              create: dynamicCategoryIds.map((catId: string) => ({
                 category: { connect: { id: catId } },
               })),
             }

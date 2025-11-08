@@ -140,26 +140,8 @@ const InstagramStylePostCreator = ({
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
     const folder = `posts/${user?.id ?? 'shared'}`;
-    const { data } = await apiClient.get('/media/signature', {
-      params: { folder },
-    });
-    const { timestamp, signature, apiKey, cloudName } = data;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('timestamp', timestamp.toString());
-    formData.append('signature', signature);
-    formData.append('api_key', apiKey);
-    formData.append('folder', folder);
-
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) throw new Error('Failed to upload image');
-    const json = await response.json();
-    return json.secure_url;
+    const { uploadToCloudinary: uploadFile } = await import('@/lib/cloudinary-client');
+    return uploadFile(file, folder);
   };
 
   const createPostMutation = useMutation({

@@ -15,11 +15,12 @@ enum UserRole {
 
 enum OrderStatus {
   pending
-  paid
-  processing
+  confirmed
+  dispatched
   shipped
   delivered
   cancelled
+  rejected
 }
 
 enum PaymentStatus {
@@ -256,6 +257,13 @@ model Order {
   paymentMethod       String        @default("online")
   paymentStatus       PaymentStatus @default(pending)
   notes               String?
+  confirmedAt         DateTime?
+  dispatchedAt        DateTime?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  expectedDeliveryDate DateTime?
+  rejectedAt          DateTime?
+  rejectionReason     String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 

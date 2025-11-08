@@ -1,7 +1,6 @@
 'use client';
 
-import { use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,11 +8,11 @@ import { Users, Package, ArrowLeft } from "lucide-react";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
 import { apiClient } from "@/lib/api-client";
 
-export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function GroupDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -21,12 +20,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   const { data: groupData, isLoading } = useQuery({
     queryKey: ['group', id],
     queryFn: async () => {
-      const { data } = await apiClient.get(`/groups/${id}`);
-      return data;
+      if (!id) throw new Error('Group ID is required');
+      const response = await apiClient.get(`/groups/${id}`);
+      return response.data;
     },
+    enabled: !!id,
   });
 
-  const group = groupData?.group;
+  const group = groupData?.data?.group;
   const isMember = group?.members?.some((m: any) => m.userId === user?.id);
 
   const joinMutation = useMutation({
@@ -49,36 +50,31 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
   if (isLoading) {
     return (
-      <ProtectedRoute>
-        <div className="min-h-screen">
-          <Header />
-          <Layout>
-            <div className="flex items-center justify-center min-h-screen">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
-            </div>
-          </Layout>
-        </div>
-      </ProtectedRoute>
+      <div className="min-h-screen">
+        <Header />
+        <Layout>
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+          </div>
+        </Layout>
+      </div>
     );
   }
 
   if (!group) {
     return (
-      <ProtectedRoute>
-        <div className="min-h-screen">
-          <Header />
-          <Layout>
-            <div className="text-center py-12">
-              <p className="text-gray-600">Group not found</p>
-            </div>
-          </Layout>
-        </div>
-      </ProtectedRoute>
+      <div className="min-h-screen">
+        <Header />
+        <Layout>
+          <div className="text-center py-12">
+            <p className="text-gray-600">Group not found</p>
+          </div>
+        </Layout>
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
       <div className="min-h-screen">
         <Header />
         <Layout>
@@ -151,7 +147,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         </Layout>
         <Footer />
       </div>
-    </ProtectedRoute>
   );
 }
 

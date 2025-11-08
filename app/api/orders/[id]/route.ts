@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth(request);
+    const user = await requireAuth();
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -66,7 +66,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth(request);
+    const user = await requireAuth();
 
     // Only admin and vendor can update orders
     if (user.role !== "admin" && user.role !== "vendor") {

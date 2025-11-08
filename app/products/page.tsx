@@ -27,7 +27,8 @@ const Products = () => {
     queryKey: ['product-categories'],
     queryFn: async () => {
       const { data } = await apiClient.get('/products/categories');
-      return data?.data?.categories || [];
+      // Support both new unified structure and legacy structure
+      return data?.data?.categories || data?.data?.dynamicCategories || data?.categories || [];
     },
   });
 
@@ -46,7 +47,9 @@ const Products = () => {
           page: pageParam,
           limit: PRODUCTS_PER_PAGE,
           search: searchTerm || undefined,
-          categoryId: selectedCategory !== 'all' ? selectedCategory : undefined,
+          // Support both enum category and dynamic categoryId
+          category: selectedCategory !== 'all' && !selectedCategory.includes('-') ? selectedCategory : undefined,
+          categoryId: selectedCategory !== 'all' && selectedCategory.includes('-') ? selectedCategory : undefined,
         },
       });
       return data;

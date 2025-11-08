@@ -1,7 +1,6 @@
 'use client';
 
-import { use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Heart, ShoppingCart, ArrowLeft } from "lucide-react";
@@ -15,26 +14,60 @@ import ReviewSummary from "@/components/ReviewSummary";
 import ReviewList from "@/components/ReviewList";
 import { apiClient } from "@/lib/api-client";
 
-export default function ProductDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ProductDetail() {
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['product', id],
     queryFn: async () => {
-      const { data } = await apiClient.get(`/products/${id}`);
-      return data;
+      if (!id) throw new Error('Product ID is required');
+      const response = await apiClient.get(`/products/${id}`);
+      return response.data;
     },
+    enabled: !!id,
   });
 
-  const product = data?.product;
+  // Extract product from nested response: response.data.data.product
+  const rawProduct = data?.data?.product;
+  
+  // Transform product data to match component expectations
+  const product = rawProduct ? {
+    ...rawProduct,
+    // Transform images array to match ImageGallery component expectations
+    images: rawProduct.images && Array.isArray(rawProduct.images) && rawProduct.images.length > 0
+      ? rawProduct.images.map((img: any) => ({
+          id: img.id,
+          image_url: img.imageUrl || img.image_url || '',
+          display_order: img.displayOrder ?? img.display_order ?? 0,
+          is_primary: img.isPrimary ?? img.is_primary ?? false,
+        }))
+      : (rawProduct.imageUrl ? [{
+          image_url: rawProduct.imageUrl,
+          is_primary: true,
+          display_order: 0,
+        }] : []),
+    // Ensure price is properly formatted (Prisma Decimal serializes as string)
+    price: rawProduct.price 
+      ? (typeof rawProduct.price === 'string' 
+          ? rawProduct.price 
+          : (typeof rawProduct.price === 'number' 
+              ? rawProduct.price.toFixed(2) 
+              : String(rawProduct.price)))
+      : '0.00',
+  } : null;
 
   const addToCartMutation = useMutation({
     mutationFn: async (quantity: number) => {
-      await apiClient.post('/cart', { productId: id, quantity });
+      if (!user) {
+        throw new Error('Please log in to add items to cart');
+      }
+      const response = await apiClient.post('/cart', { productId: id, quantity });
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart-items'] });
@@ -43,16 +76,34 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
         description: 'Product has been added to your cart',
       });
     },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to add product to cart',
+        variant: 'destructive',
+      });
+    },
   });
 
   const addToWishlistMutation = useMutation({
     mutationFn: async () => {
-      await apiClient.post('/wishlist', { productId: id });
+      if (!user) {
+        throw new Error('Please log in to add items to wishlist');
+      }
+      const response = await apiClient.post('/wishlist', { productId: id });
+      return response.data;
     },
     onSuccess: () => {
       toast({
         title: 'Added to wishlist',
         description: 'Product has been added to your wishlist',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to add product to wishlist',
+        variant: 'destructive',
       });
     },
   });
@@ -70,13 +121,40 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
     );
   }
 
-  if (!product) {
+  if (error) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <Layout>
+          <div className="text-center py-12">
+            <p className="text-red-600">Error loading product: {error instanceof Error ? error.message : 'Unknown error'}</p>
+            <Button
+              variant="outline"
+              onClick={() => router.back()}
+              className="mt-4"
+            >
+              Go Back
+            </Button>
+          </div>
+        </Layout>
+      </div>
+    );
+  }
+
+  if (!isLoading && !product) {
     return (
       <div className="min-h-screen">
         <Header />
         <Layout>
           <div className="text-center py-12">
             <p className="text-gray-600">Product not found</p>
+            <Button
+              variant="outline"
+              onClick={() => router.back()}
+              className="mt-4"
+            >
+              Go Back
+            </Button>
           </div>
         </Layout>
       </div>
@@ -99,16 +177,32 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
-              <ImageGallery images={product.images || []} productName={product.name} />
+              <ImageGallery 
+                images={product.images || []} 
+                productName={product.name || 'Product'}
+                fallbackImage={product.imageUrl}
+              />
             </div>
 
             <div className="space-y-6">
               <div>
-                <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
+                <h1 className="text-3xl font-bold mb-2">{product.name || 'Unnamed Product'}</h1>
                 <p className="text-2xl font-semibold text-pink-600 mb-4">
-                  ₹{typeof product.price === 'string' ? product.price : product.price.toString()}
+                  ₹{product.price || '0'}
                 </p>
-                <p className="text-gray-600">{product.description}</p>
+                {product.description && (
+                  <p className="text-gray-600 whitespace-pre-wrap">{product.description}</p>
+                )}
+                {product.stockQuantity !== undefined && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    Stock: {product.stockQuantity} {product.stockQuantity === 1 ? 'item' : 'items'}
+                  </p>
+                )}
+                {product.vendor && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Sold by: {product.vendor.fullName || product.vendor.email || 'Unknown Vendor'}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-4">

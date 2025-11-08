@@ -30,17 +30,24 @@ export default function CategoryDropdown({
     queryKey: ["product-categories"],
     queryFn: async () => {
       const { data } = await apiClient.get('/products/categories');
-      return data?.data?.categories || [];
+      // Support both new unified structure and legacy structure
+      return data?.data?.categories || data?.data?.dynamicCategories || data?.categories || [];
     },
   });
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>();
+    const typeMap = new Map<string, 'enum' | 'dynamic'>();
     categories.forEach((category: any) => {
       map.set(category.id, category.name);
+      // Track category type for proper handling
+      typeMap.set(category.id, category.type || 'dynamic');
     });
-    return map;
+    return { names: map, types: typeMap };
   }, [categories]);
+
+  const getCategoryName = (id: string) => categoryMap.names.get(id) || id;
+  const getCategoryType = (id: string) => categoryMap.types.get(id) || 'dynamic';
 
   const handleCategoryToggle = (categoryId: string) => {
     const newCategories = selectedCategories.includes(categoryId)
@@ -67,7 +74,7 @@ export default function CategoryDropdown({
               {selectedCategories.length === 0
                 ? "Select categories..."
                 : selectedCategories
-                    .map((id) => categoryMap.get(id))
+                    .map((id) => getCategoryName(id))
                     .filter(Boolean)
                     .join(", ") || `${selectedCategories.length} selected`}
             </span>
@@ -99,7 +106,10 @@ export default function CategoryDropdown({
               variant="secondary"
               className="flex items-center gap-1"
             >
-              {categoryMap.get(categoryId) || categoryId}
+              {getCategoryName(categoryId)}
+              {getCategoryType(categoryId) === 'enum' && (
+                <span className="text-xs opacity-70">(Enum)</span>
+              )}
               <button
                 onClick={() => removeCategory(categoryId)}
                 className="ml-1 hover:text-red-600"

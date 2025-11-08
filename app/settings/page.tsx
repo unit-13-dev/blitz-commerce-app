@@ -12,8 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProtectedRoute } from "@/lib/auth-utils";
-
 export default function SettingsPage() {
   const router = useRouter();
   const { profile, updateProfile } = useAuth();
@@ -46,8 +44,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen">
+    <div className="min-h-screen">
         <Header />
         <Layout>
           <div className="max-w-4xl mx-auto px-4 py-8 mt-20">
@@ -120,7 +117,6 @@ export default function SettingsPage() {
         </Layout>
         <Footer />
       </div>
-    </ProtectedRoute>
   );
 }
 

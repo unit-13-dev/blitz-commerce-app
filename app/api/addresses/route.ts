@@ -8,7 +8,10 @@ export async function GET(request: Request) {
 
     const addresses = await prisma.userAddress.findMany({
       where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: [
+        { isDefault: "desc" }, // Default addresses first
+        { createdAt: "desc" },
+      ],
     });
 
     return ApiResponseHandler.success({ addresses }, "Addresses fetched successfully");
@@ -40,6 +43,23 @@ export async function POST(request: Request) {
       isDefault,
     } = body;
 
+    // Validate required fields
+    if (!fullName || !phoneNumber || !addressLine1 || !city || !state || !postalCode) {
+      return ApiResponseHandler.badRequest("Please fill all required fields");
+    }
+
+    // Validate phone number format (basic validation)
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phoneNumber.replace(/\D/g, ''))) {
+      return ApiResponseHandler.badRequest("Please enter a valid 10-digit phone number");
+    }
+
+    // Validate postal code (basic validation for India)
+    const postalCodeRegex = /^[0-9]{6}$/;
+    if (!postalCodeRegex.test(postalCode)) {
+      return ApiResponseHandler.badRequest("Please enter a valid 6-digit postal code");
+    }
+
     // If this is default, unset other defaults
     if (isDefault) {
       await prisma.userAddress.updateMany({
@@ -51,11 +71,11 @@ export async function POST(request: Request) {
     const address = await prisma.userAddress.create({
       data: {
         userId: user.id,
-        addressType,
+        addressType: addressType || "home",
         fullName,
         phoneNumber,
         addressLine1,
-        addressLine2,
+        addressLine2: addressLine2 || null,
         city,
         state,
         postalCode,
