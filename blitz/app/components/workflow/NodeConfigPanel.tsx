@@ -140,6 +140,7 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
 
   const handleSave = async () => {
     setIsSaving(true);
+    setTestResult(null); // Clear any previous test results
     try {
       let configToSave: any = {};
       let isConfigured = false;
@@ -157,11 +158,16 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
         // Validate using config definition (pass hasExistingApiKey to allow empty API key if existing one is present)
         const validation = config.validate(finalGenAIConfig, hasExistingApiKey);
         if (!validation.valid) {
-          throw new Error(validation.errors.join(', '));
+          setTestResult({
+            success: false,
+            message: validation.errors.join(', '),
+          });
+          return;
         }
         
         configToSave = { genAIConfig: finalGenAIConfig };
         // Use config definition to determine if configured
+        // Note: The API will test the API key and only mark as configured if it's valid
         isConfigured = config.isConfigured(finalGenAIConfig, hasExistingApiKey);
       } else if (node.type === 'router') {
         configToSave = { routerConfig };
@@ -175,10 +181,22 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
       }
 
       await onUpdate(node.id, configToSave, isConfigured);
+      // Only close if save was successful (no error thrown)
       onClose();
     } catch (error) {
       console.error('Failed to save configuration:', error);
-      alert(error instanceof Error ? error.message : 'Failed to save configuration');
+      // Check if it's an API key validation error
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save configuration';
+      if (errorMessage.includes('API key') || errorMessage.includes('invalid') || errorMessage.includes('unauthorized')) {
+        // Show error in test result area instead of alert
+        setTestResult({
+          success: false,
+          message: errorMessage,
+        });
+      } else {
+        // For other errors, show alert
+        alert(errorMessage);
+      }
     } finally {
       setIsSaving(false);
     }

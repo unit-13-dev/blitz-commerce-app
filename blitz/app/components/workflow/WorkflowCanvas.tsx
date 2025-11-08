@@ -185,15 +185,24 @@ export function WorkflowCanvas({
           }),
         });
 
+        const data = await response.json();
+        
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Failed to save node configuration');
+          // If API key is invalid, the config is still saved but not configured
+          // Update local state with the saved config (even if error)
+          if (data.nodeConfig) {
+            setNodeConfigs((prev) => ({
+              ...prev,
+              [nodeId]: { ...data.nodeConfig.config_data, isConfigured: data.nodeConfig.is_configured },
+            }));
+          }
+          throw new Error(data.error || 'Failed to save node configuration');
         }
 
-        // Update local state
+        // Update local state with saved config
         setNodeConfigs((prev) => ({
           ...prev,
-          [nodeId]: { ...config, isConfigured },
+          [nodeId]: { ...config, isConfigured: data.nodeConfig?.is_configured ?? isConfigured },
         }));
       } catch (error) {
         console.error('Failed to save node configuration:', error);
@@ -488,12 +497,14 @@ export function WorkflowCanvas({
           onUpdate={async (nodeId, config, isConfigured) => {
             try {
               // Save configuration to database
+              // Note: saveNodeConfig may throw if API key is invalid, but config is still saved
               await saveNodeConfig(nodeId, selectedNode.type as NodeType, config, isConfigured);
-              // Update local state for immediate UI feedback
-              setNodeConfigs((prev) => ({
-                ...prev,
-                [nodeId]: { ...config, isConfigured },
-              }));
+              
+              // Get the actual configured status from nodeConfigs (updated by saveNodeConfig)
+              // The saveNodeConfig function updates nodeConfigs with the actual isConfigured status
+              const savedConfig = nodeConfigs[nodeId];
+              const actualIsConfigured = savedConfig?.isConfigured ?? isConfigured;
+              
               // Update node data to reflect configured status for UI display
               setNodes((current) =>
                 current.map((node) =>
@@ -502,7 +513,7 @@ export function WorkflowCanvas({
                         ...node,
                         data: {
                           ...node.data,
-                          isConfigured,
+                          isConfigured: actualIsConfigured,
                         },
                       }
                     : node
@@ -510,6 +521,24 @@ export function WorkflowCanvas({
               );
             } catch (error) {
               console.error('Failed to save node configuration:', error);
+              // Still update node to reflect saved state (even if not configured due to invalid API key)
+              // The saveNodeConfig function has already updated nodeConfigs
+              const savedConfig = nodeConfigs[nodeId];
+              if (savedConfig) {
+                setNodes((current) =>
+                  current.map((node) =>
+                    node.id === nodeId
+                      ? {
+                          ...node,
+                          data: {
+                            ...node.data,
+                            isConfigured: savedConfig.isConfigured ?? false,
+                          },
+                        }
+                      : node
+                  )
+                );
+              }
               throw error; // Re-throw to let NodeConfigPanel handle it
             }
           }}

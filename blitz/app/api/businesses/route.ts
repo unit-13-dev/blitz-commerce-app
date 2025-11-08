@@ -43,11 +43,42 @@ export async function GET() {
             try {
               const { nodes } = await loadWorkflowWithConfigurations(workflow.id);
               const genAINode = nodes.find((node) => node.type === 'genai-intent');
+              
               // Check if GenAI node is fully configured (has API key and model)
-              hasGenAINode = !!genAINode && 
-                            !!genAINode.isConfigured && 
-                            !!genAINode.genAIConfig?.apiKey && 
-                            !!genAINode.genAIConfig?.model;
+              if (genAINode && 
+                  genAINode.isConfigured && 
+                  genAINode.genAIConfig?.apiKey && 
+                  genAINode.genAIConfig?.model) {
+                // Test the API key to ensure it actually works
+                try {
+                  const { testAPIKey } = await import('@/app/lib/nodes/utils/api-key-validator');
+                  const apiKeyTest = await testAPIKey(genAINode.genAIConfig);
+                  hasGenAINode = apiKeyTest.valid;
+                  
+                  // If API key is invalid, mark node as not configured
+                  if (!apiKeyTest.valid) {
+                    const { saveNodeConfiguration, loadNodeConfigurations } = await import('@/app/lib/db/node-configurations');
+                    const configurations = await loadNodeConfigurations(workflow.id);
+                    const nodeConfig = configurations[genAINode.id];
+                    
+                    if (nodeConfig) {
+                      await saveNodeConfiguration(
+                        workflow.id,
+                        genAINode.id,
+                        'genai-intent',
+                        nodeConfig,
+                        false // Mark as not configured
+                      );
+                    }
+                  }
+                } catch (error) {
+                  // If API key test fails, consider it not configured
+                  console.error('[Businesses API] Failed to test API key:', error);
+                  hasGenAINode = false;
+                }
+              } else {
+                hasGenAINode = false;
+              }
             } catch (error) {
               // If loading configurations fails, assume no GenAI node
               hasGenAINode = false;

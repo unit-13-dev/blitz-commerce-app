@@ -1,6 +1,7 @@
 import { listWorkflowsForBusiness, loadWorkflowWithConfigurations } from '@/app/lib/db/workflows';
 import { WorkflowNodeWithConfig } from '@/app/lib/types/workflow';
 import { WorkflowRecord } from '@/app/lib/db/workflows';
+import { testAPIKey } from './api-key-validator';
 
 export interface WorkflowGenAINode {
   workflow: WorkflowRecord;
@@ -50,6 +51,40 @@ export async function getWorkflowGenAINode(businessId: string): Promise<Workflow
   const supportedModels = ['sonar-pro', 'sonar', 'sonar-pro-online', 'sonar-pro-chat', 'gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'];
   if (!supportedModels.includes(genAINode.genAIConfig.model)) {
     throw new Error(`Unsupported model: "${genAINode.genAIConfig.model}". Supported models are: ${supportedModels.join(', ')}. Please update your GenAI node configuration.`);
+  }
+
+  // Test the API key to ensure it actually works
+  // Note: This is async validation, so we test it here
+  // If the API key is invalid, we should mark the node as not configured
+  try {
+    const apiKeyTest = await testAPIKey(genAINode.genAIConfig);
+    if (!apiKeyTest.valid) {
+      // API key is invalid - mark node as not configured in database
+      // Import here to avoid circular dependencies
+      const { saveNodeConfiguration, loadNodeConfigurations } = await import('@/app/lib/db/node-configurations');
+      const configurations = await loadNodeConfigurations(workflow.id);
+      const nodeConfig = configurations[genAINode.id];
+      
+      if (nodeConfig) {
+        // Update to mark as not configured
+        await saveNodeConfiguration(
+          workflow.id,
+          genAINode.id,
+          'genai-intent',
+          nodeConfig,
+          false
+        );
+      }
+      
+      throw new Error(apiKeyTest.error || 'API key is invalid or not working. Please update your API key in the workflow builder.');
+    }
+  } catch (error) {
+    // If testAPIKey throws an error, check if it's our validation error
+    if (error instanceof Error && error.message.includes('API key')) {
+      throw error;
+    }
+    // Re-throw other errors
+    throw new Error(`Failed to validate API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   return {

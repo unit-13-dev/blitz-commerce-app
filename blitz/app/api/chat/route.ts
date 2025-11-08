@@ -233,16 +233,17 @@ export async function GET(request: Request) {
     try {
       const workflowGenAI = await getWorkflowGenAINode(targetBusinessId);
       
-      // If we get here, the workflow and GenAI node are configured
+      // The getWorkflowGenAINode function now tests the API key, so if we get here,
+      // it means the API key is valid and working
       return Response.json({
         status: 'success',
-        message: 'Chat API is ready. GenAI node is configured.',
+        message: 'Chat API is ready. GenAI node is configured and API key is valid.',
         timestamp: new Date().toISOString(),
         businessId: targetBusinessId,
         workflowId: workflowGenAI.workflow.id,
       });
     } catch (error) {
-      // Workflow or GenAI node is not configured
+      // Workflow or GenAI node is not configured, or API key is invalid
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
       return Response.json(
