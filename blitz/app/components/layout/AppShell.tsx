@@ -6,6 +6,7 @@ import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs';
 import { PropsWithChildren } from 'react';
 
 const navItems = [
+  { href: '/', label: 'Chat' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -65,13 +66,14 @@ function SignedOutGate() {
 export function AppShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const isWorkflows = pathname?.startsWith('/workflows');
+  const isHome = pathname === '/';
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <SignedIn>
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
           <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-            <Link href="/workflows" className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow">
                 ⚡
               </span>
@@ -85,7 +87,7 @@ export function AppShell({ children }: PropsWithChildren) {
         </header>
       </SignedIn>
 
-      <main className={`${isWorkflows ? 'w-full px-0 py-0' : 'mx-auto w-full max-w-6xl px-4 py-8'}`}>
+      <main className={`${isWorkflows || isHome ? 'w-full px-0 py-0' : 'mx-auto w-full max-w-6xl px-4 py-8'}`}>
         {children}
         <SignedOut>
           <SignedOutGate />

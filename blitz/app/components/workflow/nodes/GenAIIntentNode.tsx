@@ -6,6 +6,8 @@ import { NodeData } from '@/app/lib/types/workflow';
 export function GenAIIntentNode(props: NodeProps) {
   const nodeData = (props.data || {}) as NodeData;
   const selected = props.selected;
+  const isConfigured = nodeData.isConfigured ?? false;
+  
   return (
     <div
       className={`min-w-[220px] rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 shadow ${
@@ -21,18 +23,18 @@ export function GenAIIntentNode(props: NodeProps) {
         Understands customer intent and sends it into the automation router.
       </p>
 
-      {nodeData.genAIConfig && (
-        <div className="mb-2 rounded bg-white px-2 py-1 text-xs text-slate-700">
-          <div>Model: {nodeData.genAIConfig.model || 'gpt-4'}</div>
-          {nodeData.genAIConfig.temperature !== undefined && (
-            <div>Temp: {nodeData.genAIConfig.temperature}</div>
-          )}
+      {isConfigured ? (
+        <div className="mb-2 space-y-1 rounded bg-white px-2 py-1.5 text-xs text-slate-700">
+          <div className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+            <span className="font-medium text-green-700">Configured</span>
+          </div>
+          <div className="text-xs text-gray-600">Model: pplx-sonar-pro</div>
         </div>
-      )}
-
-      {!nodeData.isConfigured && (
-        <div className="rounded bg-amber-200/70 px-2 py-1 text-xs text-amber-800">
-          Configure intent detector
+      ) : (
+        <div className="mb-2 rounded bg-amber-200/70 px-2 py-1.5 text-xs text-amber-800">
+          <div className="font-medium">⚠️ Not Configured</div>
+          <div className="text-xs">Click to configure API key</div>
         </div>
       )}
 

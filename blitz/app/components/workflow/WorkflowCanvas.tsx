@@ -23,11 +23,11 @@ import { WorkflowNode, WorkflowEdge, ModuleType, NodeType, NodeData } from '@/ap
 import { NodeAddModal, AddableNode } from './NodeAddModal';
 
 const nodeTypes = {
-  'genai-intent': GenAIIntentNode,
-  router: RouterNode,
-  module: ModuleNode,
-  response: ResponseNode,
-} as const;
+  'genai-intent': GenAIIntentNode as React.ComponentType<any>,
+  router: RouterNode as React.ComponentType<any>,
+  module: ModuleNode as React.ComponentType<any>,
+  response: ResponseNode as React.ComponentType<any>,
+};
 
 const MODULE_DEFINITIONS: Array<{
   moduleType: ModuleType;
@@ -78,6 +78,13 @@ interface WorkflowCanvasProps {
   workflowId?: string;
   initialNodes?: WorkflowNode[];
   initialEdges?: WorkflowEdge[];
+  initialNodeConfigs?: Record<string, {
+    genAIConfig?: any;
+    routerConfig?: any;
+    moduleConfig?: any;
+    responseConfig?: any;
+    isConfigured?: boolean;
+  }>;
 }
 
 const DEFAULT_MODULE_POSITIONS: Record<ModuleType, { x: number; y: number }> = {
@@ -91,14 +98,24 @@ export function WorkflowCanvas({
   workflowId,
   initialNodes = [],
   initialEdges = [],
+  initialNodeConfigs = {},
 }: WorkflowCanvasProps) {
+  // Store node configurations separately from React Flow state
+  const [nodeConfigs, setNodeConfigs] = useState<Record<string, {
+    genAIConfig?: any;
+    routerConfig?: any;
+    moduleConfig?: any;
+    responseConfig?: any;
+    isConfigured?: boolean;
+  }>>(initialNodeConfigs);
+
   const convertedNodes: Node[] = useMemo(
     () =>
       initialNodes.map((node) => ({
         id: node.id,
         type: node.type,
         position: node.position,
-        data: node.data,
+        data: node.data, // Only basic data, no configs
         deletable: node.type === 'genai-intent' || node.type === 'router' ? false : true,
       })),
     [initialNodes]
@@ -127,15 +144,61 @@ export function WorkflowCanvas({
 
   const persistWorkflow = useCallback(
     async (nextNodes: Node[], nextEdges: Edge[]) => {
+      if (!workflowId) return; // Don't save if no workflow ID yet
+      
+      // Convert React Flow nodes to WorkflowNode format (basic info only)
+      const workflowNodes: WorkflowNode[] = nextNodes.map((node) => ({
+        id: node.id,
+        type: node.type as NodeType,
+        position: node.position,
+        data: node.data as NodeData, // Only basic data
+      }));
+
       await fetch('/api/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workflowId,
-          nodes: nextNodes,
+          nodes: workflowNodes,
           edges: nextEdges,
         }),
       });
+    },
+    [workflowId]
+  );
+
+  // Save node configuration separately
+  const saveNodeConfig = useCallback(
+    async (nodeId: string, nodeType: NodeType, config: any, isConfigured: boolean) => {
+      if (!workflowId) return;
+
+      try {
+        const response = await fetch('/api/workflows/node-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId,
+            nodeId,
+            nodeType,
+            config,
+            isConfigured,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save node configuration');
+        }
+
+        // Update local state
+        setNodeConfigs((prev) => ({
+          ...prev,
+          [nodeId]: { ...config, isConfigured },
+        }));
+      } catch (error) {
+        console.error('Failed to save node configuration:', error);
+        throw error;
+      }
     },
     [workflowId]
   );
@@ -148,6 +211,25 @@ export function WorkflowCanvas({
     persistWorkflow(nodes, edges);
   }, [nodes, edges, persistWorkflow]);
 
+  // Sync node data with configuration status for UI display
+  useEffect(() => {
+    setNodes((current) =>
+      current.map((node) => {
+        const config = nodeConfigs[node.id];
+        if (config !== undefined) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              isConfigured: config.isConfigured ?? false,
+            },
+          };
+        }
+        return node;
+      })
+    );
+  }, [nodeConfigs, setNodes]);
+
   useEffect(() => {
     setNodes((existing) => {
       const existingIds = new Set(existing.map((node) => node.id));
@@ -159,25 +241,10 @@ export function WorkflowCanvas({
             id: core.id,
             type: core.type,
             position: core.position,
-            data:
-              core.type === 'genai-intent'
-                ? {
-                    genAIConfig: {
-                      model: 'gpt-4',
-                      temperature: 0.3,
-                    },
-                    isConfigured: false,
-                  }
-                : core.type === 'router'
-                ? {
-                    routerConfig: {
-                      intentMappings: {},
-                    },
-                    isConfigured: false,
-                  }
-                : {
-                    responseType: 'text',
-                  },
+            data: {
+              // Only basic data, no configs
+              ...(core.type === 'response' ? { responseType: 'text' } : {}),
+            },
             deletable: core.type === 'genai-intent' || core.type === 'router' ? false : true,
           });
         }
@@ -217,12 +284,7 @@ export function WorkflowCanvas({
           type: 'module',
           position: DEFAULT_MODULE_POSITIONS[moduleType] || { x: 400, y: 200 },
           data: {
-            moduleType,
-            moduleConfig: {
-              moduleType,
-              apiConfigs: {},
-            },
-            isConfigured: false,
+            moduleType, // Only basic info, no configs
           },
         };
 
@@ -233,12 +295,31 @@ export function WorkflowCanvas({
   );
 
   const handleDeleteModule = useCallback(
-    (nodeId: string) => {
+    async (nodeId: string) => {
+      // Delete node configuration from database if workflow exists
+      if (workflowId) {
+        try {
+          await fetch(`/api/workflows/node-config?workflowId=${workflowId}&nodeId=${nodeId}`, {
+            method: 'DELETE',
+          });
+        } catch (error) {
+          console.error('Failed to delete node configuration:', error);
+        }
+      }
+
+      // Remove from local state
+      setNodeConfigs((prev) => {
+        const updated = { ...prev };
+        delete updated[nodeId];
+        return updated;
+      });
+
+      // Remove from React Flow
       setNodes((current) => current.filter((node) => node.id !== nodeId));
       setEdges((current) => current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
       setSelectedNode(null);
     },
-    [setEdges, setNodes]
+    [setEdges, setNodes, workflowId]
   );
 
   const protectedCoreIds = useMemo(() => new Set(CORE_NODES.filter((node) => node.type !== 'response').map((node) => node.id)), []);
@@ -388,15 +469,49 @@ export function WorkflowCanvas({
         }}
       />
 
+      {/* Backdrop overlay when config panel is open */}
+      {selectedNode && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40"
+          onClick={() => setSelectedNode(null)}
+          aria-hidden="true"
+        />
+      )}
+
       {selectedNode && (
         <NodeConfigPanel
           key={selectedNode.id}
           node={selectedNode}
           allNodes={nodes}
-          onUpdate={(nodeId, updates) => {
-            setNodes((current) =>
-              current.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node))
-            );
+          nodeConfig={nodeConfigs[selectedNode.id]}
+          workflowId={workflowId}
+          onUpdate={async (nodeId, config, isConfigured) => {
+            try {
+              // Save configuration to database
+              await saveNodeConfig(nodeId, selectedNode.type as NodeType, config, isConfigured);
+              // Update local state for immediate UI feedback
+              setNodeConfigs((prev) => ({
+                ...prev,
+                [nodeId]: { ...config, isConfigured },
+              }));
+              // Update node data to reflect configured status for UI display
+              setNodes((current) =>
+                current.map((node) =>
+                  node.id === nodeId
+                    ? {
+                        ...node,
+                        data: {
+                          ...node.data,
+                          isConfigured,
+                        },
+                      }
+                    : node
+                )
+              );
+            } catch (error) {
+              console.error('Failed to save node configuration:', error);
+              throw error; // Re-throw to let NodeConfigPanel handle it
+            }
           }}
           onDelete={selectedNode.type === 'module' ? handleDeleteModule : undefined}
           onClose={() => setSelectedNode(null)}

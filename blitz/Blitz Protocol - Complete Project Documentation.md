@@ -18,16 +18,19 @@ Blitz Protocol is a **B2B automation platform for conversational workflows**, de
 
 - **Backend API**
   - Next.js API routes for orchestrating workflows and session management
-  - Upstash Redis for short-term conversation/session state
-  - Supabase PostgreSQL for workflow definitions, user/business data
+  - Supabase PostgreSQL for workflow definitions, user/business data, and node configurations
+  - Chat history stored in Supabase (`chat_sessions` and `chat_messages` tables)
+  - Node configurations stored separately with encrypted API keys
 
 - **Automation Modules**
   - Each module: an isolated function integrating business APIs (track shipment, trigger refund, cancel order, etc.)
   - Module registry and configuration stored in database, invoked by orchestrator
 
 - **GenAI Layer**
-  - Powered by OpenAI (GPT-4 or Claude via Vercel AI SDK)
+  - Powered by Perplexity AI (Sonar Pro) and Google Gemini (via Vercel AI SDK)
   - Handles natural language understanding, intent detection, and user-friendly responses
+  - Supports multiple AI providers: Perplexity (`sonar-pro`) and Google Gemini (`gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`)
+  - API keys are stored per workflow in the database (encrypted) for secure, workflow-specific configuration
 
 - **Integration Layer**
   - REST/GraphQL adapters for business logic/APIs
@@ -51,7 +54,9 @@ Blitz Protocol is a **B2B automation platform for conversational workflows**, de
 ### Backend APIs
 - **Next.js API Routes** (App Router, `/app/api`)
 - **Express.js or Fastify** (for custom endpoints, optional)
-- **OpenAI/Anthropic API** (LLM layer)
+- **Perplexity AI SDK** (`@ai-sdk/perplexity`) - Sonar Pro model for intent detection
+- **Google Gemini SDK** (`@ai-sdk/google`) - Gemini Pro, Gemini 1.5 Pro, Gemini 1.5 Flash models
+- **Vercel AI SDK** (`ai`) - Unified interface for AI model interactions
 - **Business API Integration SDK** (custom library)
 
 ### DevOps/Infra
@@ -202,49 +207,53 @@ const context = await redis.get(`session:sess_xyz789`);
 #### **Step 3: GenAI Intent Detection**
 
 ```typescript
-// Call OpenAI with conversation context
-const intentResponse = await openai.chat.completions.create({
-  model: 'gpt-4',
-  messages: [
-    {
-      role: 'system',
-      content: `You are an intent classifier for an e-commerce chatbot.
-      
-      Available intents:
-      - TRACK_SHIPMENT: User wants delivery status
-      - CANCEL_ORDER: User wants to cancel
-      - REQUEST_REFUND: User wants money back
-      - MODIFY_ORDER: User wants to change order
-      - GENERIC_QUERY: Everything else
-      
-      Previous conversation:
-      ${JSON.stringify(context.messages)}
-      
-      Extract intent and entities as JSON:
-      {
-        "intent": "TRACK_SHIPMENT",
-        "confidence": 0.95,
-        "entities": {
-          "product": "phone case",
-          "action": "track"
-        }
-      }`
-    },
-    {
-      role: 'user',
-      content: "Where is my phone case?"
-    }
-  ],
-  response_format: { type: 'json_object' }
+// Load GenAI node configuration from database (includes decrypted API key)
+import { loadWorkflowWithConfigurations } from '@/app/lib/db/workflows';
+import { GenAINodeExecutor } from '@/app/lib/nodes/executors';
+
+// Get workflow and GenAI node configuration
+const { nodes, edges } = await loadWorkflowWithConfigurations(workflowId);
+const genAINode = nodes.find((node) => node.type === 'genai-intent');
+
+// Create executor with configuration from database
+const executor = new GenAINodeExecutor({
+  genAIConfig: genAINode.genAIConfig,  // Contains decrypted API key and model
 });
 
-// GenAI returns:
+// Execute intent detection
+const result = await executor.execute(message, {
+  businessId,
+  userId,
+  conversationHistory: context.messages,
+});
+
+// Result contains:
+// {
+//   intent: "order_query" | "cancellation" | "refund_query" | "general_query",
+//   response: "AI-generated response",
+//   extractedData: { orderId: "...", product: "..." },
+//   method: "GENAI_TO_FRONTEND" | "USER_TO_BLITZ"
+// }
+```
+
+**Key Implementation Details:**
+
+1. **API Key Loading**: API keys are loaded from the `node_configurations` table and decrypted on-demand
+2. **Model Selection**: Supports Perplexity (`sonar-pro`) and Google Gemini (`gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`)
+3. **Temperature**: Fixed at 0.2 for consistent intent detection (not user-configurable)
+4. **System Prompt**: Uses optimized default prompt for intent classification (not user-configurable)
+5. **Workflow-Specific**: Each workflow uses its own API key and model configuration
+6. **Environment Variables**: API keys are NOT read from environment variables - they come from the database
+
+**Example Result:**
+```typescript
 {
-  "intent": "TRACK_SHIPMENT",
-  "confidence": 0.95,
-  "entities": {
-    "product": "phone case"
-  }
+  intent: "order_query",
+  response: "I can help you track your phone case order. Let me look that up for you...",
+  extractedData: {
+    product: "phone case"
+  },
+  method: "USER_TO_BLITZ"  // Routes to module for order tracking
 }
 ```
 
@@ -431,28 +440,20 @@ const trackingResponse = await fetch(
 ```
 
 
-#### **Step 10: GenAI Formats Final Response**
+#### **Step 10: GenAI Formats Final Response (Optional)**
+
+**Note**: In the current implementation, GenAI already formats responses during intent detection. Additional formatting can be done if needed:
 
 ```typescript
-// Now we use GenAI to create friendly message
-const finalResponse = await openai.chat.completions.create({
-  model: 'gpt-4',
-  messages: [
-    {
-      role: 'system',
-      content: `You are a helpful customer support assistant.
-      Format tracking information in a friendly, conversational way.
-      Include key details: status, location, ETA, tracking link.
-      Use emojis appropriately.`
-    },
-    {
-      role: 'user',
-      content: `Format this tracking data: ${JSON.stringify(trackingData)}`
-    }
-  ]
-});
+// If additional formatting is needed, the GenAI node already returns a formatted response
+// from the executor.execute() call. The response is stored in chat history and returned to the user.
 
-// GenAI returns:
+// The GenAI executor uses the configured model (Perplexity or Gemini) with:
+// - Temperature: 0.2 (fixed for consistency)
+// - System Prompt: Optimized default for intent detection
+// - API Key: Loaded from database (decrypted)
+
+// Example formatted response from GenAI:
 "Great news! 🚚 Your Phone Case (Midnight Blue) is out for delivery!
 
 📍 Current location: Local Distribution Center
@@ -665,71 +666,58 @@ blitz-protocol/
 ### **1. Intent Detector (`lib/ai/intent-detector.ts`)**
 
 ```typescript
-import { openai } from './openai-client';
-import { SessionContext, Intent } from '@blitz/types';
+import { GenAINodeExecutor } from '@/app/lib/nodes/executors';
+import { loadWorkflowWithConfigurations } from '@/app/lib/db/workflows';
+import { ExecutionContext } from '@/app/lib/nodes/types/execution';
 
+/**
+ * Detects intent using GenAI node configuration from database
+ * API key is loaded from node_configurations table and decrypted
+ */
 export async function detectIntent(
   userMessage: string,
-  context: SessionContext
-): Promise<Intent> {
-  // Build conversation history for context
-  const conversationHistory = context.messages
-    .slice(-5)  // Last 5 messages only
-    .map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
+  businessId: string,
+  workflowId: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<{
+  intent: 'general_query' | 'cancellation' | 'order_query' | 'refund_query';
+  response: string;
+  extractedData?: Record<string, unknown>;
+  method: 'GENAI_TO_FRONTEND' | 'USER_TO_BLITZ';
+}> {
+  // Load workflow with node configurations (includes decrypted API keys)
+  const { nodes } = await loadWorkflowWithConfigurations(workflowId);
+  const genAINode = nodes.find((node) => node.type === 'genai-intent');
 
-  const systemPrompt = `You are an intent classifier for an e-commerce chatbot.
+  if (!genAINode || !genAINode.genAIConfig) {
+    throw new Error('GenAI node not found or not configured');
+  }
 
-Available intents:
-- TRACK_SHIPMENT: User wants delivery status/tracking
-- CANCEL_ORDER: User wants to cancel an order
-- REQUEST_REFUND: User wants refund/return
-- MODIFY_ORDER: User wants to change address/items
-- GENERIC_QUERY: General questions, greetings, etc.
-
-Previous conversation:
-${JSON.stringify(conversationHistory)}
-
-Extract entities mentioned:
-- orderId: Order number if mentioned
-- product: Product name if mentioned
-- reason: Reason for action if mentioned
-
-Return JSON:
-{
-  "intent": "INTENT_NAME",
-  "confidence": 0.0-1.0,
-  "entities": {
-    "key": "value"
-  },
-  "requiresFollowUp": boolean,
-  "followUpQuestion": "string or null"
-}`;
-
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4-turbo-preview',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage }
-    ],
-    response_format: { type: 'json_object' },
-    temperature: 0.3  // Low temperature for consistent classification
+  // Create executor with configuration from database
+  const executor = new GenAINodeExecutor({
+    genAIConfig: genAINode.genAIConfig,  // Contains decrypted API key and model
   });
 
-  const intentData = JSON.parse(response.choices[0].message.content);
-  
-  return {
-    type: intentData.intent,
-    confidence: intentData.confidence,
-    entities: intentData.entities || {},
-    requiresFollowUp: intentData.requiresFollowUp || false,
-    followUpQuestion: intentData.followUpQuestion || null,
-    detectedAt: Date.now()
+  // Execute intent detection
+  const executionContext: ExecutionContext = {
+    businessId,
+    userId: 'system',
+    conversationHistory,
   };
+
+  const result = await executor.execute(userMessage, executionContext);
+
+  return result;
 }
 ```
+
+**Key Implementation Details:**
+
+1. **Database-First**: Configuration is loaded from `node_configurations` table
+2. **Automatic Decryption**: API keys are automatically decrypted when loading configuration
+3. **Provider Support**: Supports Perplexity (`sonar-pro`) and Google Gemini models
+4. **Fixed Parameters**: Temperature is fixed at 0.2, system prompt is optimized default
+5. **Workflow-Specific**: Each workflow uses its own API key and model configuration
 
 
 ### **2. Base Module Class (`lib/modules/base-module.ts`)**
@@ -1025,96 +1013,87 @@ export async function extendSession(sessionId: string): Promise<void> {
 ### **5. Main Chat API Route (`app/api/chat/route.ts`)**
 
 ```typescript
-import { streamText } from 'ai';
-import { openai } from '@/lib/ai/openai-client';
-import { detectIntent } from '@/lib/ai/intent-detector';
-import { getSession, createSession, addMessage, updateSession } from '@/lib/redis/session';
-import { executeModule } from '@/lib/modules';
+import { auth } from '@clerk/nextjs/server';
+import { getWorkflowGenAINode } from '@/app/lib/nodes/utils/workflow-loader';
+import { getOrCreateChatSession, saveChatMessage, getChatHistory } from '@/app/lib/db/chat';
+import { GenAINodeExecutor } from '@/app/lib/nodes/executors';
 
 export async function POST(req: Request) {
   try {
-    const { userId, message, sessionId } = await req.json();
-
-    // Get or create session
-    let session = await getSession(sessionId);
-    if (!session) {
-      session = await createSession(sessionId, userId);
+    const { userId } = await auth();
+    if (!userId) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Add user message to context
-    await addMessage(sessionId, {
-      role: 'user',
-      content: message,
-      timestamp: Date.now()
-    });
+    const { message, businessId } = await req.json();
 
-    // Detect intent using GenAI
-    const intent = await detectIntent(message, session);
+    // Load workflow and GenAI node configuration from database
+    const { workflow, genAINode } = await getWorkflowGenAINode(businessId);
 
-    // Update session with detected intent
-    await updateSession(sessionId, {
-      currentIntent: intent,
-      extractedEntities: {
-        ...session.extractedEntities,
-        ...intent.entities
-      }
-    });
+    // Get or create chat session
+    const chatSession = await getOrCreateChatSession(userId, businessId);
 
-    // If GenAI needs to ask follow-up, stream that response
-    if (intent.requiresFollowUp && intent.followUpQuestion) {
-      const result = await streamText({
-        model: openai('gpt-4'),
-        prompt: intent.followUpQuestion
-      });
+    // Save user message
+    await saveChatMessage(chatSession.id, 'user', message);
 
-      return result.toAIStreamResponse();
-    }
+    // Get conversation history
+    const history = await getChatHistory(chatSession.id);
+    const conversationHistory = history.map((msg) => ({
+      role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: msg.content,
+    }));
 
-    // Execute appropriate module based on intent
-    const moduleResult = await executeModule(intent.type, {
+    // Create execution context
+    const executionContext = {
+      businessId,
       userId,
-      intent,
-      session
+      workflowId: workflow.id,
+      chatSessionId: chatSession.id,
+      conversationHistory,
+    };
+
+    // Execute GenAI node (API key is loaded from database and decrypted)
+    const nodeData = {
+      genAIConfig: genAINode.genAIConfig,  // Contains decrypted API key from DB
+    };
+    
+    const executor = new GenAINodeExecutor(nodeData);
+    const executionResult = await executor.execute(message, executionContext);
+
+    // Save assistant response
+    await saveChatMessage(
+      chatSession.id,
+      'assistant',
+      executionResult.response,
+      executionResult.intent,
+      executionResult.extractedData || null
+    );
+
+    // Return response
+    return Response.json({
+      method: executionResult.method,
+      intent: executionResult.intent,
+      response: executionResult.response,
+      data: executionResult.extractedData,
     });
-
-    // Handle module result based on flow type
-    if (moduleResult.flow === 'MODULE_TO_FRONTEND') {
-      // Return structured data directly to frontend
-      return Response.json({
-        type: 'structured_data',
-        component: moduleResult.uiComponent,
-        data: moduleResult.data
-      });
-    }
-
-    // Flow is GENAI_TO_USER - format response with AI
-    const result = await streamText({
-      model: openai('gpt-4'),
-      messages: [
-        {
-          role: 'system',
-          content: `You are a helpful customer support assistant.
-          Format the following module result in a friendly, conversational way.
-          Use appropriate emojis and maintain a warm tone.`
-        },
-        {
-          role: 'user',
-          content: `Format this data: ${JSON.stringify(moduleResult.data)}`
-        }
-      ]
-    });
-
-    return result.toAIStreamResponse();
 
   } catch (error) {
     console.error('Chat API error:', error);
     return Response.json(
-      { error: 'Failed to process message' },
+      { error: error instanceof Error ? error.message : 'Failed to process message' },
       { status: 500 }
     );
   }
 }
 ```
+
+**Key Changes:**
+
+1. **Database-First Configuration**: GenAI configuration (including API key) is loaded from `node_configurations` table
+2. **Automatic Decryption**: API keys are automatically decrypted when loading from database
+3. **Chat History**: Conversation history is stored in Supabase (`chat_sessions` and `chat_messages` tables)
+4. **Workflow-Specific**: Each workflow uses its own API key and model configuration from the database
+5. **No Environment Variables**: API keys are NOT read from environment variables - they come from the database per workflow
 
 
 ### **6. Module Executor (`lib/modules/index.ts`)**
@@ -1178,15 +1157,18 @@ async function getModuleConfig(userId: string, intentType: string) {
 ### **Workflow Builder (Current UI)**
 
 - A business owns exactly one workflow (`workflows` table enforces `UNIQUE (business_id)` in migration `20251107121000_workflow_constraints.sql`).
+- Workflows are automatically created when a user first accesses the workflows page via `ensureWorkflowForBusiness()`, which creates a default workflow with core nodes if one doesn't exist.
 - The canvas always boots with three non-removable core nodes:
-  - **GenAI Intent Layer** – cannot be deleted, contains OpenAI model configuration.
-  - **Router / Orchestrator** – cannot be deleted, mediates calls into modules and receives their results via a single connection port that all modules share.
-  - **Response Formatter** – optional clean-up node that modules can connect to if they need to format payloads before hitting the UI. Modules emitting `MODULE_TO_FRONTEND` payloads wire into this node; it feeds back into the router which in turn delivers the UI instruction to the client.
-- Additional modules (Order Tracking, Cancellation, FAQ, Refund) are added via a floating “+ Add Module” button (top-right). Each module can exist only once; once dropped, it disappears from the modal.
+  - **GenAI Intent Layer** – cannot be deleted, contains AI model configuration (Perplexity or Google Gemini). Supports model selection (`sonar-pro` for Perplexity, `gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash` for Google). API keys are stored per workflow in the database (encrypted) and loaded dynamically. Temperature is fixed at 0.2 for consistent intent detection, and system prompt uses a default optimized for intent classification.
+  - **Router / Orchestrator** – cannot be deleted, mediates calls into modules and receives their results via a single connection port (right side) that all modules connect to. Maps detected intents to specific module nodes.
+  - **Response Formatter** – optional clean-up node that modules can connect to if they need to format payloads before hitting the UI. Modules emitting `MODULE_TO_FRONTEND` payloads wire into this node; it feeds back into the router which in turn delivers the UI instruction to the client. The Response Formatter supports three response types: `text` (simple text response), `structured` (JSON data), and `ui-component` (custom UI component with props). Modules connect their output to the Response Formatter, which then formats the data according to the configured response type before sending it to the frontend.
+- Additional modules (Order Tracking, Cancellation, FAQ, Refund) are added via a floating "+ Add Module" button (top-right with padding). Each module type can exist only once; once dropped, it disappears from the modal.
 - Connections are **manual**. Designers decide which edges exist (e.g., Router ↔ Tracking, Cancellation ↔ Refund). Selecting an edge and pressing Delete/Backspace removes that connection.
-- GenAI and Router nodes are marked `deletable: false` inside React Flow; if users attempt to delete them the canvas immediately restores the node.
+- Node handles are positioned on the left (input) and right (output) sides of nodes, not top/bottom.
+- GenAI, Router, and Response nodes are marked `deletable: false` inside React Flow; if users attempt to delete them the canvas immediately restores the node.
 - Every node/edge change (add/remove/reposition, module config edit) triggers an immediate POST to `/api/workflows`, ensuring Supabase always has the canonical workflow snapshot.
-- Module deletion is supported through the config panel’s “Remove module” button or Delete/Backspace on a selected module node.
+- Node configurations (API keys, model settings, etc.) are stored separately in the `node_configurations` table with encrypted API keys. This allows each workflow to have its own AI provider configuration.
+- Module deletion is supported through the config panel's "Delete Module" button or Delete/Backspace on a selected module node. Deleting a module also removes its configuration from the database.
 
 ```tsx
 // components/workflow/WorkflowCanvas.tsx (excerpt)
@@ -1374,49 +1356,114 @@ export const CustomNodes = {
 
 ### **API Key Management**
 
+API keys for GenAI providers (Perplexity and Google Gemini) are stored per workflow in the `node_configurations` table. Each workflow can have its own AI provider configuration, allowing businesses to use different API keys or providers for different workflows.
+
 ```typescript
-// Database schema for API configurations
-CREATE TABLE business_api_configs (
+// Database schema for node configurations
+CREATE TABLE node_configurations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  business_id UUID REFERENCES businesses(id),
-  api_name VARCHAR(100) NOT NULL,
-  base_url TEXT NOT NULL,
-  api_key_encrypted TEXT NOT NULL,  -- Encrypted using AES-256
-  authentication_type VARCHAR(50) NOT NULL,  -- 'bearer', 'apikey', 'oauth'
-  headers JSONB,  -- Additional headers
-  timeout INTEGER DEFAULT 10000,
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  node_id VARCHAR(255) NOT NULL,
+  node_type VARCHAR(50) NOT NULL,  -- 'genai-intent', 'router', 'module', 'response'
+  config_data JSONB NOT NULL,  -- Contains encrypted API keys and other config
+  is_configured BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(workflow_id, node_id)
 );
 
-// Encryption helper
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+// Encryption helper (AES-256-CBC with scrypt key derivation)
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!; // 32-byte key
 const ALGORITHM = 'aes-256-cbc';
+const SALT_LENGTH = 16;
+const IV_LENGTH = 16;
+const KEY_LENGTH = 32;
 
-export function encryptAPIKey(apiKey: string): string {
-  const iv = randomBytes(16);
-  const cipher = createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
-  
-  let encrypted = cipher.update(apiKey, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  
-  // Return iv:encrypted format
-  return `${iv.toString('hex')}:${encrypted}`;
+function deriveKey(encryptionKey: string, salt: Buffer): Buffer {
+  return scryptSync(encryptionKey, salt, KEY_LENGTH);
 }
 
-export function decryptAPIKey(encrypted: string): string {
-  const [ivHex, encryptedData] = encrypted.split(':');
+export function encryptAPIKey(apiKey: string): string {
+  const encryptionKey = process.env.API_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error('API_ENCRYPTION_KEY environment variable is not set');
+  }
+
+  // Generate random salt and IV
+  const salt = randomBytes(SALT_LENGTH);
+  const iv = randomBytes(IV_LENGTH);
+
+  // Derive key from encryption key and salt
+  const key = deriveKey(encryptionKey, salt);
+
+  // Encrypt
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  let encrypted = cipher.update(apiKey, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+
+  // Return format: salt:iv:encrypted (all in hex)
+  return `${salt.toString('hex')}:${iv.toString('hex')}:${encrypted}`;
+}
+
+export function decryptAPIKey(encryptedData: string): string {
+  const encryptionKey = process.env.API_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error('API_ENCRYPTION_KEY environment variable is not set');
+  }
+
+  // Parse the encrypted data
+  const parts = encryptedData.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted data format. Expected salt:iv:encrypted');
+  }
+
+  const [saltHex, ivHex, encryptedHex] = parts;
+
+  // Convert hex strings to buffers
+  const salt = Buffer.from(saltHex, 'hex');
   const iv = Buffer.from(ivHex, 'hex');
-  const decipher = createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
-  
-  let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+
+  // Derive key from encryption key and salt
+  const key = deriveKey(encryptionKey, salt);
+
+  // Decrypt
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
-  
+
   return decrypted;
 }
 ```
+
+#### **GenAI Node Configuration**
+
+The GenAI Intent node supports multiple AI providers:
+
+1. **Perplexity AI**
+   - Model: `sonar-pro`
+   - API Key: Obtained from Perplexity (starts with `pplx-`)
+   - Use case: Fast, accurate intent detection
+
+2. **Google Gemini**
+   - Models: `gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`
+   - API Key: Obtained from [Google AI Studio](https://aistudio.google.com/api-keys) (starts with `AIza`)
+   - Use case: Alternative provider with different pricing/performance characteristics
+
+**Configuration Process:**
+1. User clicks on GenAI node → Configuration panel opens on the right
+2. User selects model from dropdown (Perplexity or Gemini models)
+3. User enters API key (encrypted and stored in database)
+4. Configuration is saved to `node_configurations` table
+5. API key is decrypted when needed for API calls
+
+**Key Features:**
+- **Workflow-Specific Keys**: Each workflow has its own API key stored in the database
+- **Dynamic Loading**: API keys are loaded from database (decrypted) when executing workflows, not from environment variables
+- **Secure Storage**: API keys are encrypted using AES-256-CBC before storing in database
+- **Multiple Providers**: Support for both Perplexity and Google Gemini
+- **Fixed Temperature**: Temperature is hardcoded to 0.2 for consistent, deterministic intent detection
+- **Default System Prompt**: Uses an optimized system prompt for intent classification (not user-configurable)
 
 
 ### **Rate Limiting**
@@ -1494,12 +1541,36 @@ CREATE TABLE workflows (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Module configurations
-CREATE TABLE module_configs (
+-- Node configurations (stores GenAI, Router, Module, and Response node configs)
+CREATE TABLE node_configurations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  workflow_id UUID REFERENCES workflows(id),
-  module_type VARCHAR(100) NOT NULL,  -- TRACK_SHIPMENT, CANCEL_ORDER, etc.
-  config JSONB NOT NULL,  -- Module-specific settings
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  node_id VARCHAR(255) NOT NULL,
+  node_type VARCHAR(50) NOT NULL,  -- 'genai-intent', 'router', 'module', 'response'
+  config_data JSONB NOT NULL,  -- Contains encrypted API keys and other config
+  is_configured BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(workflow_id, node_id)
+);
+
+-- Chat sessions (for storing conversation history)
+CREATE TABLE chat_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id VARCHAR(255) NOT NULL,  -- Clerk user ID
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Chat messages (for storing individual messages in sessions)
+CREATE TABLE chat_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  role VARCHAR(20) NOT NULL,  -- 'user' or 'assistant'
+  content TEXT NOT NULL,
+  intent VARCHAR(100),  -- Detected intent (if any)
+  extracted_data JSONB,  -- Extracted entities/data
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -1552,27 +1623,36 @@ CREATE TABLE usage_metrics (
 
 ```bash
 # .env.local
-# OpenAI
-OPENAI_API_KEY=sk-...
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
 
-# Redis (Upstash)
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your_token
+# Supabase (PostgreSQL)
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# PostgreSQL (Supabase)
-DATABASE_URL=postgresql://...
-DIRECT_URL=postgresql://...  # For migrations
+# API Key Encryption (for encrypting API keys before storing in database)
+API_ENCRYPTION_KEY=your_32_byte_hex_key_for_encryption
 
-# Encryption
-ENCRYPTION_KEY=your_32_byte_hex_key
+# Optional: Fallback API keys (only used if workflow doesn't have its own key)
+# These are NOT required - API keys should be configured per workflow in the UI
+PERPLEXITY_API_KEY=pplx-...  # Optional fallback
+GOOGLE_GENERATIVE_AI_API_KEY=AIza...  # Optional fallback
 
 # App
-NEXTAUTH_SECRET=your_secret
-NEXTAUTH_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Vercel (auto-set in production)
 VERCEL_URL=
 ```
+
+**Important Notes:**
+
+1. **API Keys Per Workflow**: API keys for GenAI providers (Perplexity, Google Gemini) are stored per workflow in the database, not in environment variables. Users configure them through the UI.
+2. **Encryption Key**: The `API_ENCRYPTION_KEY` is used to encrypt API keys before storing them in the database. This must be a 32-byte key (64 hex characters).
+3. **Fallback Keys**: Optional environment variables (`PERPLEXITY_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) can be used as fallbacks, but the primary method is to configure keys per workflow in the UI.
+4. **Supabase**: Uses Supabase for database, authentication (via Clerk), and storage.
+5. **Clerk**: Handles user authentication and session management.
 
 
 ### **Deployment Steps**
@@ -1644,14 +1724,131 @@ jobs:
 **Tech Stack:**
 
 - Next.js + Vercel (frontend \& API)
-- Redis/Upstash (session storage)
-- PostgreSQL/Supabase (persistent data)
-- OpenAI GPT-4 (intent detection)
+- PostgreSQL/Supabase (persistent data, chat history, workflow configurations)
+- Perplexity AI (Sonar Pro) and Google Gemini (intent detection)
 - React Flow (workflow builder)
+- Clerk (authentication)
+- AES-256-CBC encryption (for API key storage)
 
 **Key Differentiator:** Separation of conversation from execution - businesses get AI benefits without losing control.
 
 **Target Market:** E-commerce businesses spending \$5K-50K/month on customer support, looking to automate 70%+ of repetitive queries while maintaining quality.
+
+---
+
+## 📝 Recent Updates (Latest Changes)
+
+### **GenAI Configuration Enhancements**
+
+1. **Multi-Provider Support**
+   - Added support for Google Gemini models (`gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`)
+   - Maintained support for Perplexity AI (`sonar-pro`)
+   - Users can select their preferred AI provider in the GenAI node configuration panel
+
+2. **Simplified Configuration UI**
+   - Removed Temperature field from UI (now hardcoded to 0.2 for consistent intent detection)
+   - Removed System Prompt textbox (uses optimized default prompt for intent classification)
+   - Streamlined configuration process for better UX
+
+3. **Workflow-Specific API Keys**
+   - API keys are now stored per workflow in the database (encrypted)
+   - Each workflow can have its own AI provider and API key configuration
+   - API keys are loaded from database and decrypted on-demand (not from environment variables)
+   - Supports multiple workflows with different AI providers
+
+4. **Secure API Key Storage**
+   - API keys are encrypted using AES-256-CBC before storing in database
+   - Uses scrypt key derivation for enhanced security
+   - Encryption format: `salt:iv:encrypted` (all in hex)
+
+5. **Test Functionality**
+   - Test endpoint (`/api/nodes/test-genai`) loads configuration from database
+   - Decrypts API key from database automatically
+   - Tests GenAI node configuration with actual API calls
+   - Returns detailed test results including intent detection and response
+
+6. **Chat History Persistence**
+   - Chat sessions and messages are stored in Supabase (`chat_sessions` and `chat_messages` tables)
+   - Conversation history is loaded and used for context in intent detection
+   - Supports multiple chat sessions per user/business
+
+7. **Automatic Workflow Creation**
+   - Workflows are automatically created when a user first accesses the workflows page
+   - Default workflow includes GenAI, Router, and Response nodes
+   - Ensures every business has a workflow to configure
+
+8. **Node Configuration Management**
+   - Node configurations are stored separately in `node_configurations` table
+   - Supports configuration for GenAI, Router, Module, and Response nodes
+   - Configurations are loaded and merged with workflow state when needed
+   - API keys are automatically encrypted/decrypted during save/load operations
+
+### **Database Schema Updates**
+
+- Added `node_configurations` table for storing node-specific configurations
+- Added `chat_sessions` and `chat_messages` tables for conversation history
+- Updated `workflows` table to enforce single workflow per business
+
+### **API Route Updates**
+
+- Updated `/api/nodes/test-genai` to load configuration from database
+- Updated `/api/workflows/node-config` to support GenAI and Gemini models
+- Updated `/api/chat` to use database-loaded configurations
+
+### **UI/UX Improvements**
+
+- Updated GenAI node configuration panel with model selection dropdown
+- Added support for both Perplexity and Google Gemini models
+- Improved error messages and validation
+- Added test functionality in configuration panel
+- Node handles positioned on left (input) and right (output) sides
+- "Add Module" button repositioned to top-right with padding
+- Core nodes (GenAI, Router, Response) are non-deletable
+- Router node has single output endpoint for all modules
+
+### **Response Formatter Node - How It Works**
+
+The Response Formatter node is the final step in the workflow that formats module outputs before sending them to the frontend. Here's how it works:
+
+**Connection Flow:**
+```
+Module Node → Response Formatter → Router → Frontend
+```
+
+**Configuration Options:**
+
+1. **Text Response** (`text`)
+   - Simple text response sent directly to the user
+   - Used for plain text messages
+   - Example: "Your order has been cancelled successfully."
+
+2. **Structured Data** (`structured`)
+   - JSON data response with optional schema
+   - Used for API-like responses
+   - Example: `{ "status": "success", "orderId": "ORD-123", "message": "Order cancelled" }`
+
+3. **UI Component** (`ui-component`)
+   - Custom React component with props
+   - Used for rich UI elements (cards, buttons, forms, etc.)
+   - Example: `{ "component": "OrderDetailsCard", "props": { "orderId": "ORD-123" } }`
+
+**How Modules Connect:**
+
+- Modules execute and return data
+- Module output connects to Response Formatter (via edge)
+- Response Formatter formats data according to configured type
+- Formatted response flows back through Router to frontend
+- Frontend renders the response (text, JSON, or UI component)
+
+**Example Workflow:**
+1. User asks: "Where is my order?"
+2. GenAI detects intent: `order_query`
+3. Router routes to Order Tracking Module
+4. Module fetches order data from business API
+5. Module output connects to Response Formatter
+6. Response Formatter formats as UI Component: `OrderDetailsCard`
+7. Router sends formatted response to frontend
+8. Frontend renders `OrderDetailsCard` with order details
 
 **This is your complete technical and business blueprint. Ready to build! 🚀**
 

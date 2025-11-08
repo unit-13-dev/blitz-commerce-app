@@ -8,14 +8,32 @@ export function getSupabaseAdmin(): SupabaseClient {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error('Supabase environment variables are not set');
+      const missingVars = [];
+      if (!supabaseUrl) missingVars.push('SUPABASE_URL');
+      if (!serviceRoleKey) missingVars.push('SUPABASE_SERVICE_ROLE_KEY');
+      
+      throw new Error(
+        `Supabase environment variables are not set: ${missingVars.join(', ')}. ` +
+        `Please ensure these are set in your .env.local file or environment configuration.`
+      );
     }
 
-    client = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-      },
-    });
+    try {
+      client = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+        },
+        db: {
+          schema: 'public',
+        },
+      });
+    } catch (error) {
+      console.error('[getSupabaseAdmin] Failed to create Supabase client:', error);
+      throw new Error(
+        `Failed to initialize Supabase client: ${error instanceof Error ? error.message : String(error)}. ` +
+        `Please check your SUPABASE_URL format.`
+      );
+    }
   }
 
   return client;
