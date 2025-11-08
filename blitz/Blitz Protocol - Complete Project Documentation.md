@@ -1871,11 +1871,15 @@ jobs:
   - Validates configuration before testing
 
 - **`/api/workflows/node-config` (POST)**
+  - **For GenAI nodes**: `isConfigured` is ALWAYS determined by API key validation test
+  - Frontend's `isConfigured` value is ignored for GenAI nodes
   - Tests API key before saving configuration
-  - Only marks node as "configured" if API key test passes
+  - **Valid API key** → Sets `is_configured = true` in database
+  - **Invalid API key** → Sets `is_configured = false` in database
   - Saves configuration even if API key is invalid (for user to edit)
   - Returns error response if API key is invalid (but still saves config)
   - Supports GenAI and Gemini models with proper validation
+  - Comprehensive logging to track save process and verify database updates
 
 - **`/api/chat` (POST)**
   - Loads workflow and GenAI node configuration from database
@@ -2026,6 +2030,86 @@ Module Node → Response Formatter → Router → Frontend
 - ✅ **Error Handling**: Clear error messages with actionable guidance
 - ✅ **Status Indicators**: Real-time workflow readiness status
 - ✅ **Multi-Business Support**: Each business uses its own workflow and API key
+
+---
+
+## 🔧 Latest Updates (December 2024)
+
+### **API Key Management & Configuration Fixes**
+
+1. **Fixed `/api/businesses` Endpoint**
+   - Now properly checks `is_configured` flag directly from database (`node_configurations` table)
+   - Uses `workflowHasConfiguredGenAI()` helper to query database for accurate status
+   - Database `is_configured` column is the source of truth for configuration status
+   - Decryption verification is performed for logging/debugging but doesn't affect the result
+   - Improved logging to help debug configuration issues
+
+2. **Enhanced API Key Decryption**
+   - Improved error handling in `decryptConfigData()` function
+   - Better validation of encrypted data format (salt:iv:encrypted)
+   - Validates buffer lengths and hex strings before decryption
+   - Preserves database `is_configured` flag even if decryption fails
+   - Clear error messages when `API_ENCRYPTION_KEY` is missing or incorrect
+   - Handles edge cases like empty or corrupted encrypted data
+
+3. **Improved Configuration Loading**
+   - `loadNodeConfigurations()` now preserves database `is_configured` flag even on decryption errors
+   - Better error logging with detailed context (node ID, node type, error details)
+   - Graceful handling of decryption failures without breaking workflow loading
+   - Logs configuration status for debugging purposes
+
+4. **Fixed GenAI Node Configuration Saving**
+   - **Critical Fix**: `is_configured` is now ALWAYS determined by API key validation test
+   - Frontend's `isConfigured` value is ignored for GenAI nodes
+   - API key is tested before saving, and `is_configured` is set based on test result:
+     - ✅ Valid API key → `is_configured = true` in database
+     - ❌ Invalid API key → `is_configured = false` in database
+   - Added comprehensive logging to track configuration save process
+   - Verifies saved `is_configured` value matches expected value
+
+5. **Added `validateConfig()` Method to GenAINodeExecutor**
+   - Fixed "executor.validateConfig is not a function" error
+   - Validates model is present and supported
+   - Validates API key format (starts with "pplx-" or "AIza")
+   - Returns `{ valid: boolean; errors: string[] }` format
+   - Used by `api-key-validator.ts` for configuration validation
+
+6. **Enhanced Database Operations**
+   - `saveNodeConfiguration()` now includes detailed logging
+   - Logs when updating vs creating new configurations
+   - Verifies `is_configured` value is correctly saved
+   - Better error messages for database operation failures
+
+### **Technical Details**
+
+**API Key Encryption/Decryption Flow:**
+1. When saving: API key is encrypted using AES-256-CBC with scrypt key derivation
+2. Format: `salt:iv:encrypted` (all in hex)
+3. When loading: API key is decrypted using `API_ENCRYPTION_KEY` from environment
+4. If decryption fails: Configuration is still loaded but without decrypted API key
+5. Database `is_configured` flag is preserved regardless of decryption status
+
+**Configuration Status Determination:**
+- **Source of Truth**: `is_configured` column in `node_configurations` table
+- **For GenAI Nodes**: Status is determined by API key validation test
+- **For Other Nodes**: Status is determined by configuration completeness
+- **Business API**: `/api/businesses` queries database directly for accurate status
+
+**Error Handling Improvements:**
+- Decryption errors are logged with full context
+- Configuration loading continues even if some nodes fail to decrypt
+- Clear error messages guide users to fix issues (e.g., check `API_ENCRYPTION_KEY`)
+- Database operations include verification logging
+
+### **Files Modified**
+
+- `app/api/businesses/route.ts` - Fixed to check database `is_configured` flag
+- `app/lib/db/node-configurations.ts` - Enhanced decryption and error handling
+- `app/lib/encryption.ts` - Improved validation and error messages
+- `app/api/workflows/node-config/route.ts` - Fixed to set `is_configured` based on API key test
+- `app/lib/nodes/executors/GenAINodeExecutor.ts` - Added `validateConfig()` method
+- `app/lib/nodes/utils/workflow-loader.ts` - Improved error handling and logging
+- `app/api/chat/route.ts` - Updated comments and error handling
 
 **This is your complete technical and business blueprint. Ready to build! 🚀**
 
