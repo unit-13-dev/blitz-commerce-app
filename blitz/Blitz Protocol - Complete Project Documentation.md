@@ -208,12 +208,29 @@ const context = await redis.get(`session:sess_xyz789`);
 
 ```typescript
 // Load GenAI node configuration from database (includes decrypted API key)
-import { loadWorkflowWithConfigurations } from '@/app/lib/db/workflows';
+import { getWorkflowGenAINode } from '@/app/lib/nodes/utils/workflow-loader';
 import { GenAINodeExecutor } from '@/app/lib/nodes/executors';
 
-// Get workflow and GenAI node configuration
-const { nodes, edges } = await loadWorkflowWithConfigurations(workflowId);
-const genAINode = nodes.find((node) => node.type === 'genai-intent');
+// Get workflow and GenAI node configuration (validates API key is working)
+const { workflow, genAINode } = await getWorkflowGenAINode(businessId);
+// This function:
+// 1. Loads workflow from database
+// 2. Finds GenAI node
+// 3. Validates API key is working (tests it)
+// 4. Decrypts API key from database
+// 5. Returns workflow + GenAI config
+
+// Get chat history (before saving new message to avoid duplication)
+const history = await getChatHistory(chatSession.id);
+const conversationHistory = history
+  .filter((msg) => msg.content && msg.content.trim().length > 0)
+  .map((msg) => ({
+    role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: msg.content.trim(),
+  }));
+
+// Save user message to database
+await saveChatMessage(chatSession.id, 'user', message);
 
 // Create executor with configuration from database
 const executor = new GenAINodeExecutor({
@@ -224,7 +241,9 @@ const executor = new GenAINodeExecutor({
 const result = await executor.execute(message, {
   businessId,
   userId,
-  conversationHistory: context.messages,
+  workflowId: workflow.id,
+  chatSessionId: chatSession.id,
+  conversationHistory,  // Previous messages for context
 });
 
 // Result contains:
@@ -234,16 +253,29 @@ const result = await executor.execute(message, {
 //   extractedData: { orderId: "...", product: "..." },
 //   method: "GENAI_TO_FRONTEND" | "FRONTEND_TO_BLITZ"
 // }
+
+// Save assistant response to database
+await saveChatMessage(
+  chatSession.id,
+  'assistant',
+  result.response,
+  result.intent,
+  result.extractedData || null
+);
 ```
 
 **Key Implementation Details:**
 
 1. **API Key Loading**: API keys are loaded from the `node_configurations` table and decrypted on-demand
-2. **Model Selection**: Supports Perplexity (`sonar-pro`) and Google Gemini (`gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`)
-3. **Temperature**: Fixed at 0.2 for consistent intent detection (not user-configurable)
-4. **System Prompt**: Uses optimized default prompt for intent classification (not user-configurable)
-5. **Workflow-Specific**: Each workflow uses its own API key and model configuration
-6. **Environment Variables**: API keys are NOT read from environment variables - they come from the database
+2. **API Key Validation**: API keys are tested with actual API calls before use to ensure they work
+3. **Model Selection**: Supports Perplexity (`sonar-pro`) and Google Gemini (`gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`)
+4. **Temperature**: Fixed at 0.2 for consistent intent detection (not user-configurable)
+5. **System Prompt**: Uses optimized default prompt for intent classification (not user-configurable)
+6. **Workflow-Specific**: Each workflow uses its own API key and model configuration
+7. **Environment Variables**: API keys are NOT read from environment variables - they come from the database
+8. **Message Alternation**: Messages are validated and fixed to ensure proper alternation (user → assistant → user)
+9. **Conversation Context**: Previous messages are included for context in intent detection
+10. **Error Handling**: Clear error messages if API key is invalid or configuration is missing
 
 **Example Result:**
 ```typescript
@@ -1761,50 +1793,150 @@ jobs:
    - Uses scrypt key derivation for enhanced security
    - Encryption format: `salt:iv:encrypted` (all in hex)
 
-5. **Test Functionality**
-   - Test endpoint (`/api/nodes/test-genai`) loads configuration from database
-   - Decrypts API key from database automatically
-   - Tests GenAI node configuration with actual API calls
-   - Returns detailed test results including intent detection and response
+5. **API Key Validation & Testing**
+   - **Real-time API Key Validation**: API keys are tested with actual API calls before saving
+   - **Automatic Validation on Save**: When saving a GenAI node configuration, the API key is automatically tested
+   - **Invalid Key Handling**: If an API key is invalid, the configuration is saved but marked as "not configured"
+   - **Test Endpoint**: Test endpoint (`/api/nodes/test-genai`) loads configuration from database and tests with real API calls
+   - **Automatic Re-validation**: API keys are re-validated when loading workflows to ensure they still work
+   - **Error Messages**: Clear error messages when API keys are invalid or unauthorized
 
-6. **Chat History Persistence**
+6. **View/Edit Mode for GenAI Configuration**
+   - **View Mode**: When a GenAI node is configured, shows masked API key (`****`) and read-only model selection
+   - **Edit Mode**: Allows updating API key and model selection with validation
+   - **Test Configuration Button**: Available in view mode to test the configured API key
+   - **Edit Config Button**: Replaces "Save configuration" button in view mode
+   - **Cancel Functionality**: Allows canceling edits and reverting to saved configuration
+   - **Improved UX**: Cleaner interface with clear separation between viewing and editing
+
+7. **Chat History Persistence**
    - Chat sessions and messages are stored in Supabase (`chat_sessions` and `chat_messages` tables)
    - Conversation history is loaded and used for context in intent detection
    - Supports multiple chat sessions per user/business
+   - **Fixed Message Duplication**: Conversation history is retrieved before saving new messages to avoid duplication
+   - **Message Alternation**: Proper message alternation validation to ensure AI SDK compatibility
 
-7. **Automatic Workflow Creation**
+8. **Automatic Workflow Creation**
    - Workflows are automatically created when a user first accesses the workflows page
    - Default workflow includes GenAI, Router, and Response nodes
    - Ensures every business has a workflow to configure
 
-8. **Node Configuration Management**
+9. **Node Configuration Management**
    - Node configurations are stored separately in `node_configurations` table
    - Supports configuration for GenAI, Router, Module, and Response nodes
    - Configurations are loaded and merged with workflow state when needed
    - API keys are automatically encrypted/decrypted during save/load operations
+   - **Configuration Validation**: Configurations are validated before saving, including API key testing
+
+10. **Improved Chat API Flow**
+    - **Message Handling**: Proper message alternation between user and assistant messages
+    - **Conversation Context**: Conversation history is properly formatted and validated before sending to AI
+    - **Error Handling**: Improved error messages for configuration issues and API failures
+    - **Status Indicators**: Chat UI shows workflow readiness status based on GenAI node configuration
+    - **Business Workflow Selection**: Users can select which business workflow to use for chat
+    - **Test API Endpoint**: GET endpoint to test if a business workflow has a configured and working GenAI node
+
+11. **Workflow Validation Improvements**
+    - **API Key Testing**: Workflows are validated to ensure GenAI node API keys are working
+    - **Automatic Status Updates**: Invalid API keys automatically mark nodes as "not configured"
+    - **Business Status API**: `/api/businesses` endpoint tests API keys to determine if workflows are ready
+    - **Chat UI Status**: Chat interface shows accurate status of workflow configuration
+
+12. **Refactored Node Configuration Logic**
+    - **Separate Configuration Files**: Each node type has its own configuration file (e.g., `genai-node.config.ts`)
+    - **Centralized Validation**: Node configuration validation is centralized in configuration files
+    - **Reusable Components**: Configuration logic can be easily reused across different parts of the application
+    - **Type Safety**: Improved TypeScript types for node configurations
 
 ### **Database Schema Updates**
 
 - Added `node_configurations` table for storing node-specific configurations
+  - Stores encrypted API keys for GenAI nodes
+  - Tracks configuration status (`is_configured` flag)
+  - Supports different node types (GenAI, Router, Module, Response)
 - Added `chat_sessions` and `chat_messages` tables for conversation history
+  - `chat_sessions`: Stores chat session metadata (user, business, timestamps)
+  - `chat_messages`: Stores individual messages with role, content, intent, and metadata
+  - Messages are ordered by `created_at` for proper conversation context
 - Updated `workflows` table to enforce single workflow per business
+- Added encryption/decryption utilities for secure API key storage
 
 ### **API Route Updates**
 
-- Updated `/api/nodes/test-genai` to load configuration from database
-- Updated `/api/workflows/node-config` to support GenAI and Gemini models
-- Updated `/api/chat` to use database-loaded configurations
+- **`/api/nodes/test-genai` (POST)**
+  - Loads configuration from database (with decrypted API key)
+  - Tests API key with actual API call to AI provider
+  - Supports testing with new API keys (for edit mode)
+  - Returns detailed test results including intent detection
+  - Validates configuration before testing
+
+- **`/api/workflows/node-config` (POST)**
+  - Tests API key before saving configuration
+  - Only marks node as "configured" if API key test passes
+  - Saves configuration even if API key is invalid (for user to edit)
+  - Returns error response if API key is invalid (but still saves config)
+  - Supports GenAI and Gemini models with proper validation
+
+- **`/api/chat` (POST)**
+  - Loads workflow and GenAI node configuration from database
+  - Validates API key is working before processing messages
+  - Retrieves conversation history before saving new messages
+  - Properly formats messages for AI SDK (alternating user/assistant)
+  - Handles message alternation validation and fixing
+  - Saves user message and assistant response to database
+  - Returns structured response with intent, method, and data
+
+- **`/api/chat` (GET)**
+  - Tests if business workflow has configured GenAI node
+  - Validates API key is working before returning success
+  - Returns error if GenAI node is not configured or API key is invalid
+  - Used by "Test API" button in chat UI
+
+- **`/api/businesses` (GET)**
+  - Lists all businesses with workflow status
+  - Tests API keys to determine if workflows are ready
+  - Automatically marks nodes as "not configured" if API keys are invalid
+  - Returns accurate `hasGenAINode` status based on API key validation
 
 ### **UI/UX Improvements**
 
-- Updated GenAI node configuration panel with model selection dropdown
-- Added support for both Perplexity and Google Gemini models
-- Improved error messages and validation
-- Added test functionality in configuration panel
-- Node handles positioned on left (input) and right (output) sides
-- "Add Module" button repositioned to top-right with padding
-- Core nodes (GenAI, Router, Response) are non-deletable
-- Router node has single output endpoint for all modules
+- **GenAI Node Configuration Panel**
+  - View/Edit mode toggle for better UX
+  - Masked API key display (`****`) in view mode
+  - Read-only model selection in view mode
+  - "Test Configuration" button in view mode
+  - "Edit Config" button to enter edit mode
+  - "Save configuration" and "Cancel" buttons in edit mode
+  - Real-time validation feedback
+  - Clear error messages for invalid API keys
+  - Support for both Perplexity and Google Gemini models
+
+- **Chat Interface**
+  - Business workflow selection dropdown
+  - "Test API" button to test workflow configuration
+  - Status indicators showing workflow readiness
+  - Green banner when GenAI node is configured and working
+  - Yellow warning when GenAI node is not configured
+  - Disabled send button when workflow is not ready
+  - Dynamic placeholder text based on configuration status
+  - Intent badges in chat messages
+  - Improved error messages with actionable guidance
+
+- **Workflow Canvas**
+  - Node handles positioned on left (input) and right (output) sides
+  - "Add Module" button repositioned to top-right with padding
+  - Core nodes (GenAI, Router, Response) are non-deletable
+  - Router node has single output endpoint for all modules
+  - Configuration panel opens on node click
+  - Backdrop overlay when configuration panel is open
+  - Real-time workflow status updates
+
+- **Error Handling**
+  - Clear, user-friendly error messages
+  - Contextual error messages based on failure type
+  - Actionable error messages with next steps
+  - Error display in configuration panel (not just alerts)
+  - Validation feedback before saving
 
 ### **Response Formatter Node - How It Works**
 
@@ -1849,6 +1981,51 @@ Module Node → Response Formatter → Router → Frontend
 6. Response Formatter formats as UI Component: `OrderDetailsCard`
 7. Router sends formatted response to frontend
 8. Frontend renders `OrderDetailsCard` with order details
+
+---
+
+## 🔄 Complete Chat Flow (Updated)
+
+### **End-to-End Chat Flow**
+
+1. **User sends message** → Frontend (`app/page.tsx`)
+   - Validates business has configured GenAI node
+   - Sends POST to `/api/chat` with message and businessId
+
+2. **Chat API** (`app/api/chat/route.ts`)
+   - Authenticates user
+   - Loads workflow and GenAI node (validates API key works)
+   - Gets chat history (before saving new message)
+   - Saves user message to database
+   - Creates GenAINodeExecutor with decrypted API key
+   - Executes GenAI node
+
+3. **GenAI Node Executor** (`app/lib/nodes/executors/GenAINodeExecutor.ts`)
+   - Validates configuration (API key, model)
+   - Prepares messages array (history + current message)
+   - Validates message alternation (user/assistant)
+   - Sets API key in environment (temporarily)
+   - Calls AI API (Perplexity or Gemini)
+   - Parses intent and extracted data
+   - Returns result with method (GENAI_TO_FRONTEND or FRONTEND_TO_BLITZ)
+
+4. **Response** → Chat API
+   - Saves assistant response to database
+   - Returns JSON response to frontend
+
+5. **Frontend** → Displays response in chat UI
+   - Shows response with intent badges
+   - Updates chat messages list
+
+### **Key Features**
+
+- ✅ **API Key Validation**: API keys are tested before use
+- ✅ **View/Edit Modes**: Clean UI for viewing and editing configurations
+- ✅ **Message Alternation**: Proper message formatting for AI SDK
+- ✅ **Conversation Context**: Previous messages included for better responses
+- ✅ **Error Handling**: Clear error messages with actionable guidance
+- ✅ **Status Indicators**: Real-time workflow readiness status
+- ✅ **Multi-Business Support**: Each business uses its own workflow and API key
 
 **This is your complete technical and business blueprint. Ready to build! 🚀**
 
