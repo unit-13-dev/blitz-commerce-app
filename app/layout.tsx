@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import "./globals.css";
 import { AppProviders } from "@/lib/AppProvider";
-import { authOptions } from "@/lib/auth-options";
+import { authOptions } from "@/app/api/auth/[...nextauth]/option";
 
 export const metadata: Metadata = {
   title: "Gup Shop",

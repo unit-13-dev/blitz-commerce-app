@@ -4,7 +4,7 @@ import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const body = await request.json();
     const { gstNumber, panNumber, tanNumber, phoneNumber, existingKycId } = body;
 

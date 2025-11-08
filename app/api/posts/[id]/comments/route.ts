@@ -3,12 +3,12 @@ import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(request);
     const userId = user?.id ?? null;
 
     const comments = await prisma.postComment.findMany({
@@ -62,7 +62,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const body = await request.json();
     const { content } = body;
 

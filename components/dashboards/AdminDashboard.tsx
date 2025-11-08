@@ -158,7 +158,7 @@ const AdminDashboard = () => {
     { id: "groups", label: "Groups", icon: Users },
   ];
 
-  const { data: pendingKYCsResponse } = useQuery({
+  const { data: pendingKYCsResponse, error: kycError } = useQuery({
     queryKey: ["pending-kycs"],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/kyc', {
@@ -166,11 +166,13 @@ const AdminDashboard = () => {
       });
       return data;
     },
+    enabled: profile?.role === 'admin',
+    retry: 1,
   });
 
-  const pendingKYCs = pendingKYCsResponse?.kycs || [];
+  const pendingKYCs = pendingKYCsResponse?.data?.kycs || [];
 
-  const { data: usersResponse } = useQuery({
+  const { data: usersResponse, error: usersError } = useQuery({
     queryKey: ["all-users", debouncedSearchTerm],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/users', {
@@ -178,39 +180,56 @@ const AdminDashboard = () => {
       });
       return data;
     },
+    enabled: profile?.role === 'admin',
+    retry: 1,
   });
 
-  const users = usersResponse?.users || [];
+  const users = usersResponse?.data?.users || [];
 
-  const { data: productsResponse } = useQuery({
+  const { data: productsResponse, error: productsError } = useQuery({
     queryKey: ["all-products"],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/products');
       return data;
     },
+    enabled: profile?.role === 'admin',
+    retry: 1,
   });
 
-  const products = productsResponse?.products || [];
+  const products = productsResponse?.data?.products || [];
 
-  const { data: groupsResponse } = useQuery({
+  const { data: groupsResponse, error: groupsError } = useQuery({
     queryKey: ["all-groups"],
     queryFn: async () => {
       const { data } = await apiClient.get('/groups');
       return data;
     },
+    enabled: profile?.role === 'admin',
+    retry: 1,
   });
 
-  const groups = groupsResponse?.groups || [];
+  const groups = groupsResponse?.data?.groups || [];
 
-  const { data: postsResponse } = useQuery({
+  const { data: postsResponse, error: postsError } = useQuery({
     queryKey: ["all-posts"],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/posts');
       return data;
     },
+    enabled: profile?.role === 'admin',
+    retry: 1,
   });
 
-  const posts = postsResponse?.posts || [];
+  const posts = postsResponse?.data?.posts || [];
+
+  // Log errors for debugging
+  useEffect(() => {
+    if (kycError) console.error('KYC Error:', kycError);
+    if (usersError) console.error('Users Error:', usersError);
+    if (productsError) console.error('Products Error:', productsError);
+    if (groupsError) console.error('Groups Error:', groupsError);
+    if (postsError) console.error('Posts Error:', postsError);
+  }, [kycError, usersError, productsError, groupsError, postsError]);
 
   const createPostMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -657,7 +676,15 @@ const AdminDashboard = () => {
       <h3 className="text-lg font-semibold">
         KYC Verification Requests ({pendingKYCs?.length || 0})
       </h3>
-      {pendingKYCs?.length === 0 ? (
+      {kycError && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+            <p className="text-red-600">Error loading KYC requests. Please try again.</p>
+          </CardContent>
+        </Card>
+      )}
+      {!kycError && pendingKYCs?.length === 0 ? (
         <Card>
           <CardContent className="text-center py-8">
             <Shield className="w-12 h-12 mx-auto text-gray-400 mb-4" />
@@ -666,7 +693,7 @@ const AdminDashboard = () => {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : !kycError && (
         <div className="space-y-4">
           {pendingKYCs?.map((kyc: any | undefined) => (
             <Card key={kyc.id}>
@@ -765,6 +792,15 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        {usersError && (
+          <Card>
+            <CardContent className="text-center py-8">
+              <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+              <p className="text-red-600">Error loading users. Please try again.</p>
+            </CardContent>
+          </Card>
+        )}
+        {!usersError && (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -836,6 +872,7 @@ const AdminDashboard = () => {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
     );
   };
@@ -845,56 +882,73 @@ const AdminDashboard = () => {
       <h3 className="text-lg font-semibold">
         Product Management ({products?.length || 0} products)
       </h3>
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left p-4">Product</th>
-                  <th className="text-left p-4">Vendor</th>
-                  <th className="text-left p-4">Price</th>
-                  <th className="text-left p-4">Status</th>
-                  <th className="text-left p-4">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products?.map((product: any) => (
-                  <tr key={product.id} className="border-b hover:bg-gray-50">
-                    <td className="p-4">{product.name}</td>
-                    <td className="p-4">
-                      {product.vendor?.fullName ||
-                        product.vendor?.email}
-                    </td>
-                    <td className="p-4">₹{product.price}</td>
-                    <td className="p-4">
-                      <Badge
-                        variant={product.isActive ? "default" : "secondary"}
-                      >
-                        {product.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </td>
-                    <td className="p-4">
-                      <Button
-                        variant={product.isActive ? "destructive" : "default"}
-                        size="sm"
-                        onClick={() =>
-                          updateProductStatusMutation.mutate({
-                            productId: product.id,
-                            isActive: !product.isActive,
-                          })
-                        }
-                      >
-                        {product.isActive ? "Deactivate" : "Activate"}
-                      </Button>
-                    </td>
+      {productsError && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+            <p className="text-red-600">Error loading products. Please try again.</p>
+          </CardContent>
+        </Card>
+      )}
+      {!productsError && (products?.length === 0 || !products) ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <Package className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+            <p className="text-gray-500">No products found</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-4">Product</th>
+                    <th className="text-left p-4">Vendor</th>
+                    <th className="text-left p-4">Price</th>
+                    <th className="text-left p-4">Status</th>
+                    <th className="text-left p-4">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                </thead>
+                <tbody>
+                  {products?.map((product: any) => (
+                    <tr key={product.id} className="border-b hover:bg-gray-50">
+                      <td className="p-4">{product.name}</td>
+                      <td className="p-4">
+                        {product.vendor?.fullName ||
+                          product.vendor?.email}
+                      </td>
+                      <td className="p-4">₹{product.price}</td>
+                      <td className="p-4">
+                        <Badge
+                          variant={product.isActive ? "default" : "secondary"}
+                        >
+                          {product.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </td>
+                      <td className="p-4">
+                        <Button
+                          variant={product.isActive ? "destructive" : "default"}
+                          size="sm"
+                          onClick={() =>
+                            updateProductStatusMutation.mutate({
+                              productId: product.id,
+                              isActive: !product.isActive,
+                            })
+                          }
+                        >
+                          {product.isActive ? "Deactivate" : "Activate"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 
@@ -903,14 +957,22 @@ const AdminDashboard = () => {
       <h3 className="text-lg font-semibold">
         Post Management ({posts?.length || 0} posts)
       </h3>
-      {posts?.length === 0 ? (
+      {postsError && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+            <p className="text-red-600">Error loading posts. Please try again.</p>
+          </CardContent>
+        </Card>
+      )}
+      {!postsError && posts?.length === 0 ? (
         <Card>
           <CardContent className="text-center py-8">
             <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
             <p className="text-gray-500">No posts found</p>
           </CardContent>
         </Card>
-      ) : (
+      ) : !postsError && (
         <div className="space-y-4">
           {posts?.map((post: any) => (
             <Card key={post.id}>
@@ -950,14 +1012,22 @@ const AdminDashboard = () => {
       <h3 className="text-lg font-semibold">
         Group Management ({groups?.length || 0} groups)
       </h3>
-      {groups?.length === 0 ? (
+      {groupsError && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+            <p className="text-red-600">Error loading groups. Please try again.</p>
+          </CardContent>
+        </Card>
+      )}
+      {!groupsError && groups?.length === 0 ? (
         <Card>
           <CardContent className="text-center py-8">
             <Users className="w-12 h-12 mx-auto text-gray-400 mb-4" />
             <p className="text-gray-500">No groups found</p>
           </CardContent>
         </Card>
-      ) : (
+      ) : !groupsError && (
         <div className="space-y-4">
           {groups?.map((group: any) => (
             <Card key={group.id}>
@@ -1051,7 +1121,7 @@ const AdminDashboard = () => {
       while (currentKycId) {
         try {
           const { data } = await apiClient.get(`/kyc/${currentKycId}`);
-          const kycData = data?.kyc;
+          const kycData = data?.data?.kyc;
           if (!kycData) break;
 
           // Only add rejected KYCs to history

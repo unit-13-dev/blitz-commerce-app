@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('productId');
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     if (productId) {
       const item = await prisma.wishlistItem.findUnique({
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const body = await request.json();
     const { productId } = body;
 

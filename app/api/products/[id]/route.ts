@@ -49,7 +49,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(request);
     
     if (!user) {
       return ApiResponseHandler.unauthorized();
@@ -147,12 +147,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(request);
     
     if (!user) {
       return ApiResponseHandler.unauthorized();

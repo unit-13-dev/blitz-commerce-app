@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
+import { UserRole } from "@prisma/client";
 
 export async function GET(request: Request) {
   try {
     // Require admin role
-    await requireRole('admin');
+    await requireRole('admin' as UserRole, request);
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";

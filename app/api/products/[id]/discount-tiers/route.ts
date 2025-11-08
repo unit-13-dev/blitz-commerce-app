@@ -26,7 +26,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     const product = await prisma.product.findUnique({
       where: { id },

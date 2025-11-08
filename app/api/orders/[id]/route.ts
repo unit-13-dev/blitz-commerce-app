@@ -3,12 +3,12 @@ import { requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -66,7 +66,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     // Only admin and vendor can update orders
     if (user.role !== "admin" && user.role !== "vendor") {

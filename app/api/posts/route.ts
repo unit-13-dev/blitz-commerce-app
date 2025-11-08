@@ -75,7 +75,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const body = await request.json();
     const {
       content,

@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireRole("admin" as UserRole);
+    await requireRole("admin" as UserRole, request);
     const body = await request.json();
     
     if (!body.name || body.name.trim().length === 0) {

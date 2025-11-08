@@ -4,7 +4,7 @@ import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const { searchParams } = new URL(request.url);
     const folder = searchParams.get("folder") ?? `users/${user.id}`;
 

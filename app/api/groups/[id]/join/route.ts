@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
     const body = await request.json();
     const { accessCode } = body;
 

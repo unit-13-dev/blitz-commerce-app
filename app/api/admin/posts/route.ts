@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
+import { UserRole } from "@prisma/client";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Require admin role
-    await requireRole('admin');
+    await requireRole('admin' as UserRole, request);
 
     const posts = await prisma.post.findMany({
       include: {

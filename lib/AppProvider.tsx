@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SessionProvider } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthProvider } from '@/contexts/AuthContext';
+// import { AuthProvider } from '@/contexts/AuthContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -26,13 +26,13 @@ export const AppProviders = ({ children, session }: AppProvidersProps) => {
         refetchOnWindowFocus={true} // Refetch when window gains focus
       >
         <ThemeProvider>
-          <AuthProvider>
+          {/* <AuthProvider> */}
             <TooltipProvider>
               {children}
               <Toaster />
               <Sonner />
             </TooltipProvider>
-          </AuthProvider>
+          {/* </AuthProvider> */}
         </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>

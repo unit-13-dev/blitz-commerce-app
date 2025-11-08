@@ -1,14 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireRole } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
+import { UserRole } from "@prisma/client";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(request);
 
     if (!user) {
       return ApiResponseHandler.unauthorized();
@@ -55,7 +56,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const admin = await requireRole('admin');
+    const admin = await requireRole('admin' as UserRole, request);
     const body = await request.json();
     const { status, rejectionReason } = body;
 

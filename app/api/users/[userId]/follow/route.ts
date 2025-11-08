@@ -3,12 +3,12 @@ import { requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const { userId } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     if (user.id === userId) {
       return ApiResponseHandler.badRequest("Cannot follow yourself");
@@ -47,12 +47,12 @@ export async function POST(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const { userId } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     await prisma.follow.deleteMany({
       where: {

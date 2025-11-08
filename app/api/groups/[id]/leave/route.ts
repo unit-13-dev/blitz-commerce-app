@@ -3,12 +3,12 @@ import { requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     const member = await prisma.groupMember.findFirst({
       where: {

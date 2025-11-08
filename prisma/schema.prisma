@@ -51,6 +51,32 @@ enum KycStatus {
   rejected
 }
 
+enum EcommerceCategory {
+  electronics
+  clothing
+  accessories
+  home_garden
+  beauty_personal_care
+  sports_outdoors
+  books_media
+  toys_games
+  automotive
+  health_wellness
+  food_beverages
+  pet_supplies
+  baby_kids
+  jewelry_watches
+  shoes
+  bags_luggage
+  furniture
+  appliances
+  office_supplies
+  art_crafts
+  musical_instruments
+  industrial_scientific
+  other
+}
+
 model Profile {
   id        String   @id
   email     String   @unique
@@ -91,7 +117,7 @@ model Product {
   description       String?
   price             Decimal  @db.Decimal(10, 2)
   imageUrl          String?
-  category          String?
+  category          EcommerceCategory?
   stockQuantity     Int      @default(0)
   isActive          Boolean  @default(true)
   groupOrderEnabled Boolean  @default(false)

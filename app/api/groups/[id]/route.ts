@@ -3,12 +3,12 @@ import { getCurrentUser, requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser(); // Optional auth for viewing groups
+    const user = await getCurrentUser(request); // Optional auth for viewing groups
     const userId = user?.id ?? null;
     
     // Allow public access for viewing groups
@@ -83,7 +83,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     const group = await prisma.group.findUnique({
       where: { id },
@@ -154,12 +154,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     const group = await prisma.group.findUnique({
       where: { id },

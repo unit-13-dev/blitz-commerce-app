@@ -43,16 +43,24 @@ const Auth = () => {
         router.push("/");
       } else {
         const { error } = await signUp(email, password, fullName, userType);
-        if (error) throw error;
+        if (error) {
+          toast({
+            title: "Error",
+            description: error,
+            variant: "destructive",
+          });
+          return;
+        }
         toast({
           title: "Account created!",
-          description: "Please check your email to verify your account.",
+          description: "Your account has been created successfully.",
         });
+        router.push("/");
       }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {

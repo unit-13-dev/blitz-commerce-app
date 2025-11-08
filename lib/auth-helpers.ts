@@ -1,115 +1,80 @@
-import { cookies } from "next/headers";
-import { getToken } from "next-auth/jwt";
-import { prisma } from "@/lib/prisma";
-import type { UserRole } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/option";
+import { UserRole } from "@prisma/client";
 
-export interface CurrentUser {
+export interface AuthenticatedUser {
   id: string;
   email: string;
-  fullName: string | null;
-  role: UserRole;
-  avatarUrl: string | null;
+  name?: string | null;
+  role: string;
+  image?: string | null;
 }
 
 /**
- * Get current authenticated user from session
- * Server-side equivalent of useAuth().profile
- * Always fetches fresh data from database to ensure role is up-to-date
- * 
- * @param requiredRole - Optional role check (e.g., 'admin', 'vendor', 'user')
- * @returns User profile or null if not authenticated
- * @throws Error with message containing 'UNAUTHORIZED' or 'FORBIDDEN' for error handling
+ * Get the current user from the session (optional - returns null if not authenticated)
+ * @param request - Optional request object (kept for backward compatibility, not used)
  */
-export async function getCurrentUser(requiredRole?: UserRole): Promise<CurrentUser | null> {
+export async function getCurrentUser(request?: Request): Promise<AuthenticatedUser | null> {
   try {
-    // Read session token from cookies (same way NextAuth does)
-    const cookieStore = await cookies();
-    const sessionToken = 
-      cookieStore.get('next-auth.session-token')?.value || 
-      cookieStore.get('__Secure-next-auth.session-token')?.value;
+    const session = await getServerSession(authOptions);
     
-    if (!sessionToken) {
+    if (!session?.user) {
       return null;
-    }
-
-    // Decode JWT token to get user ID
-    const token = await getToken({ 
-      req: {
-        headers: {
-          cookie: `next-auth.session-token=${sessionToken}`,
-        },
-      } as any,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-
-    if (!token || !token.id || typeof token.id !== 'string') {
-      return null;
-    }
-
-    // Fetch profile from database (ensures fresh role)
-    const profile = await prisma.profile.findUnique({
-      where: { id: token.id },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        role: true,
-        avatarUrl: true,
-      },
-    });
-
-    if (!profile) {
-      return null;
-    }
-
-    // Check role if requiredRole is provided
-    if (requiredRole && profile.role !== requiredRole) {
-      throw new Error(`FORBIDDEN: ${requiredRole} access required`);
     }
 
     return {
-      id: profile.id,
-      email: profile.email,
-      fullName: profile.fullName,
-      role: profile.role,
-      avatarUrl: profile.avatarUrl,
+      id: session.user.id || "",
+      email: session.user.email || "",
+      name: session.user.name || null,
+      role: (session.user as any).role || "user",
+      image: session.user.image || null,
     };
   } catch (error) {
-    // Re-throw role check errors
-    if (error instanceof Error && error.message.includes('FORBIDDEN')) {
-      throw error;
-    }
-    // Return null for auth errors (not authenticated)
-    console.error('Error getting current user:', error);
+    console.error("Error getting current user:", error);
     return null;
   }
 }
 
 /**
  * Require authentication - throws error if user is not authenticated
- * @returns User profile (guaranteed to exist)
- * @throws Error if not authenticated
+ * @param request - Optional request object (kept for backward compatibility, not used)
  */
-export async function requireAuth(): Promise<CurrentUser> {
-  const user = await getCurrentUser();
+export async function requireAuth(request?: Request): Promise<AuthenticatedUser> {
+  const user = await getCurrentUser(request);
+  
   if (!user) {
-    throw new Error('UNAUTHORIZED: Authentication required');
+    const error = new Error("UNAUTHORIZED: Authentication required");
+    (error as any).statusCode = 401;
+    throw error;
   }
+
   return user;
 }
 
 /**
- * Require specific role - throws error if user doesn't have required role
- * @param role - Required role ('admin', 'vendor', or 'user')
- * @returns User profile with required role (guaranteed to exist and have role)
- * @throws Error if not authenticated or doesn't have required role
+ * Require a specific role - throws error if user doesn't have the required role
  */
-export async function requireRole(role: UserRole): Promise<CurrentUser> {
-  const user = await getCurrentUser(role);
-  if (!user) {
-    throw new Error('UNAUTHORIZED: Authentication required');
+export async function requireRole(role: UserRole | UserRole[]): Promise<AuthenticatedUser> {
+  const user = await requireAuth();
+  const requiredRoles = Array.isArray(role) ? role : [role];
+  
+  if (!requiredRoles.includes(user.role as UserRole)) {
+    const error = new Error("FORBIDDEN: Insufficient permissions");
+    (error as any).statusCode = 403;
+    throw error;
   }
-  // If we get here, user exists and has the required role
+
   return user;
+}
+
+/**
+ * Check if user has a specific role
+ */
+export async function hasRole(role: UserRole | UserRole[]): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  
+  const requiredRoles = Array.isArray(role) ? role : [role];
+  return requiredRoles.includes(user.role as UserRole);
 }
 

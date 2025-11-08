@@ -2,9 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
 import { ApiResponseHandler } from "@/lib/api-response";
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(request);
 
     await prisma.cartItem.deleteMany({
       where: { userId: user.id },
