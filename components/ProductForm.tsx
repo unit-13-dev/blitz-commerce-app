@@ -41,6 +41,8 @@ const DEFAULT_FORM = {
   stockQuantity: '',
   isActive: true,
   groupOrderEnabled: false,
+  isReturnable: false,
+  isReplaceable: false,
 };
 
 const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
@@ -91,6 +93,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
       stockQuantity: productDetail.stockQuantity?.toString() || '',
       isActive: productDetail.isActive ?? true,
       groupOrderEnabled: productDetail.groupOrderEnabled ?? false,
+      isReturnable: productDetail.isReturnable ?? false,
+      isReplaceable: productDetail.isReplaceable ?? false,
     });
 
     if (productDetail.categories) {
@@ -136,7 +140,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
     }
   };
 
-  const handleToggleChange = (name: 'isActive' | 'groupOrderEnabled') =>
+  const handleToggleChange = (name: 'isActive' | 'groupOrderEnabled' | 'isReturnable' | 'isReplaceable') =>
     (value: boolean) => {
       setForm((prev) => ({ ...prev, [name]: value }));
     };
@@ -207,6 +211,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
         throw new Error('Product name is required');
       }
 
+      // Validate returnable/replaceable - at least one must be selected
+      if (!form.isReturnable && !form.isReplaceable) {
+        throw new Error('Please select at least one option: Returnable or Replaceable');
+      }
+
       const payload = {
         name: form.name,
         description: form.description,
@@ -214,6 +223,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
         stockQuantity: parseInt(form.stockQuantity || '0', 10) || 0,
         isActive: form.isActive,
         groupOrderEnabled: form.groupOrderEnabled,
+        isReturnable: form.isReturnable,
+        isReplaceable: form.isReplaceable,
         categories: selectedCategories,
         discountTiers: tiers.map((tier, index) => ({
           tierNumber: index + 1,
@@ -354,32 +365,81 @@ const ProductForm: React.FC<ProductFormProps> = ({ onClose, existingData }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="isActive">Active</Label>
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <Switch
-                  id="isActive"
-                  checked={form.isActive}
-                  onCheckedChange={handleToggleChange('isActive')}
-                />
-                <span className="text-sm text-muted-foreground">
-                  Toggle to hide or show this product in the storefront.
-                </span>
+          <div className="space-y-4">
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+              <Label className="text-base font-semibold text-blue-900 mb-3 block">
+                Return & Replacement Policy *
+              </Label>
+              <p className="text-sm text-blue-800 mb-4">
+                Please select at least one option. This information will be displayed to customers and helps build trust.
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 rounded-lg border border-blue-300 bg-white p-3">
+                  <Switch
+                    id="isReturnable"
+                    checked={form.isReturnable}
+                    onCheckedChange={handleToggleChange('isReturnable')}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="isReturnable" className="font-medium cursor-pointer">
+                      Returnable
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Customers can return this product for a refund or exchange.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-lg border border-blue-300 bg-white p-3">
+                  <Switch
+                    id="isReplaceable"
+                    checked={form.isReplaceable}
+                    onCheckedChange={handleToggleChange('isReplaceable')}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="isReplaceable" className="font-medium cursor-pointer">
+                      Replaceable
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Customers can request a replacement for this product if defective or damaged.
+                    </p>
+                  </div>
+                </div>
               </div>
+              {!form.isReturnable && !form.isReplaceable && (
+                <p className="text-xs text-red-600 mt-2">
+                  ⚠️ Please select at least one option (Returnable or Replaceable)
+                </p>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="groupOrderEnabled">Enable group orders</Label>
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <Switch
-                  id="groupOrderEnabled"
-                  checked={form.groupOrderEnabled}
-                  onCheckedChange={handleToggleChange('groupOrderEnabled')}
-                />
-                <span className="text-sm text-muted-foreground">
-                  Allow group ordering and community discounts for this product.
-                </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="isActive">Active</Label>
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <Switch
+                    id="isActive"
+                    checked={form.isActive}
+                    onCheckedChange={handleToggleChange('isActive')}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Toggle to hide or show this product in the storefront.
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="groupOrderEnabled">Enable group orders</Label>
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <Switch
+                    id="groupOrderEnabled"
+                    checked={form.groupOrderEnabled}
+                    onCheckedChange={handleToggleChange('groupOrderEnabled')}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Allow group ordering and community discounts for this product.
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -11,11 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Package, FileText, AlertCircle, CheckCircle, Clock, ShoppingBag } from 'lucide-react';
+import { Plus, Package, FileText, AlertCircle, CheckCircle, Clock, ShoppingBag, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import KYCForm from '@/components/KYCForm';
 import ProductForm from '@/components/ProductForm';
 import VendorOrderList from '@/components/orders/VendorOrderList';
+import VendorReturnReplaceRequests from '@/components/orders/VendorReturnReplaceRequests';
 import Header from '../Header';
 
 const VendorDashboard = () => {
@@ -98,12 +99,16 @@ const VendorDashboard = () => {
         <h1 className="text-3xl font-bold mb-8">Vendor Dashboard</h1>
         
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="orders">
               <ShoppingBag className="w-4 h-4 mr-2" />
               Orders
+            </TabsTrigger>
+            <TabsTrigger value="return-replace">
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Returns/Replaces
             </TabsTrigger>
             <TabsTrigger value="kyc">KYC Verification</TabsTrigger>
           </TabsList>
@@ -284,6 +289,10 @@ const VendorDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="return-replace">
+            <VendorReturnReplaceRequests />
           </TabsContent>
         </Tabs>
 

@@ -18,7 +18,7 @@ export default function Wishlist() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: wishlistData, isLoading } = useQuery({
+  const { data: wishlistData, isLoading, error } = useQuery({
     queryKey: ['wishlist-items', user?.id],
     queryFn: async () => {
       const { data } = await apiClient.get('/wishlist');
@@ -27,7 +27,7 @@ export default function Wishlist() {
     enabled: !!user?.id,
   });
 
-  const wishlistItems = wishlistData?.items || [];
+  const wishlistItems = wishlistData?.data?.items || [];
 
   const removeFromWishlistMutation = useMutation({
     mutationFn: async (itemId: string) => {
@@ -61,6 +61,13 @@ export default function Wishlist() {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
                 <p className="mt-4 text-gray-600">Loading wishlist...</p>
               </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <p className="text-xl text-red-600 mb-4">Error loading wishlist</p>
+                <Button onClick={() => queryClient.invalidateQueries({ queryKey: ['wishlist-items'] })}>
+                  Try Again
+                </Button>
+              </div>
             ) : wishlistItems.length === 0 ? (
               <div className="text-center py-12">
                 <Heart className="w-24 h-24 text-gray-300 mx-auto mb-4" />
@@ -71,13 +78,21 @@ export default function Wishlist() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {wishlistItems.map((item: any) => (
-                  <HighlightProductCard
-                    key={item.id}
-                    product={item.product}
-                    vendor={item.product.vendor_profile || { id: '', email: '', full_name: '' }}
-                  />
-                ))}
+                {wishlistItems.map((item: any) => {
+                  const vendor = item.product?.vendor_profile || item.product?.vendor || {
+                    id: item.product?.vendorId || '',
+                    email: '',
+                    full_name: '',
+                  };
+                  
+                  return (
+                    <HighlightProductCard
+                      key={item.id}
+                      product={item.product}
+                      vendor={vendor}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

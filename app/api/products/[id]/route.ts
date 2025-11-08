@@ -79,9 +79,18 @@ export async function PUT(
       stockQuantity,
       isActive,
       groupOrderEnabled,
+      isReturnable,
+      isReplaceable,
       images,
       categories, // Dynamic categories (array of category IDs)
     } = body;
+
+    // Validate returnable/replaceable if provided
+    if (isReturnable !== undefined && isReplaceable !== undefined) {
+      if (!isReturnable && !isReplaceable) {
+        return ApiResponseHandler.badRequest("At least one option must be selected: isReturnable or isReplaceable");
+      }
+    }
 
     // Validate and convert enum category if provided (optional)
     let validatedCategory = undefined;
@@ -165,8 +174,10 @@ export async function PUT(
         imageUrl,
         category: finalEnumCategory as any, // Cast to enum type
         stockQuantity: stockQuantity ? parseInt(stockQuantity) : undefined,
-        isActive,
-        groupOrderEnabled,
+        isActive: isActive !== undefined ? isActive : undefined,
+        groupOrderEnabled: groupOrderEnabled !== undefined ? groupOrderEnabled : undefined,
+        isReturnable: isReturnable !== undefined ? isReturnable : undefined,
+        isReplaceable: isReplaceable !== undefined ? isReplaceable : undefined,
         images: images
           ? {
               create: images.map((img: any, index: number) => ({
@@ -214,7 +225,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser(request);
+    const user = await getCurrentUser();
     
     if (!user) {
       return ApiResponseHandler.unauthorized();

@@ -11,6 +11,7 @@ import Footer from "@/components/Footer";
 import { apiClient } from "@/lib/api-client";
 import UserProfileHeader from "@/components/UserProfileHeader";
 import SocialProfileTabs from "@/components/SocialProfileTabs";
+import RecentOrders from "@/components/RecentOrders";
 
 export default function UserProfilePage() {
   const params = useParams();
@@ -76,6 +77,11 @@ export default function UserProfilePage() {
             profile={profile}
             isOwnProfile={isOwnProfile}
           />
+
+          {/* Recent Orders Section - Show for all users viewing their own profile */}
+          {isOwnProfile && (
+            <RecentOrders userId={userId} limit={5} showViewAll={true} />
+          )}
 
           <SocialProfileTabs 
             profileUserId={userId} 

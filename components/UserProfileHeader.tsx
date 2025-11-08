@@ -182,31 +182,70 @@ const UserProfileHeader = ({ profileUserId, profile, isOwnProfile, onEditProfile
               </div>
 
               {/* Stats */}
-              <div className="flex gap-6 text-sm">
-                <div className="text-center">
-                  <div className="font-bold text-lg text-gray-900 dark:text-white">
-                    {profile?.posts_count || 0}
-                  </div>
-                  <div className="text-gray-600 dark:text-gray-300">Posts</div>
-                </div>
-                <button 
-                  onClick={openFollowersModal}
-                  className="text-center hover:bg-slate-500 hover:text-white cursor-pointer rounded-lg p-2 transition-colors duration-200"
-                >
-                  <div className="font-bold text-lg text-gray-900 dark:text-white hover:text-white">
-                    {profile?.followers_count || 0}
-                  </div>
-                  <div className="text-gray-600 dark:text-gray-300 hover:text-white">Followers</div>
-                </button>
-                <button 
-                  onClick={openFollowingModal}
-                  className="text-center hover:bg-slate-500 hover:text-white cursor-pointer rounded-lg p-2 transition-colors duration-200"
-                >
-                  <div className="font-bold text-lg text-gray-900 dark:text-white hover:text-white">
-                    {profile?.following_count || 0}
-                  </div>
-                  <div className="text-gray-600 dark:text-gray-300 hover:text-white">Following</div>
-                </button>
+              <div className="flex gap-6 text-sm flex-wrap">
+                {profile?.adminStats && isOwnProfile ? (
+                  // Admin stats - show application-wide statistics
+                  <>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile.adminStats.totalPosts || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Total Posts</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile.adminStats.totalUsers || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Total Users</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile.adminStats.totalOrders || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Total Orders</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile.adminStats.totalProducts || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Total Products</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile.adminStats.totalGroups || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Total Groups</div>
+                    </div>
+                  </>
+                ) : (
+                  // Regular user stats
+                  <>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                        {profile?.posts_count || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300">Posts</div>
+                    </div>
+                    <button 
+                      onClick={openFollowersModal}
+                      className="text-center hover:bg-slate-500 hover:text-white cursor-pointer rounded-lg p-2 transition-colors duration-200"
+                    >
+                      <div className="font-bold text-lg text-gray-900 dark:text-white hover:text-white">
+                        {profile?.followers_count || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 hover:text-white">Followers</div>
+                    </button>
+                    <button 
+                      onClick={openFollowingModal}
+                      className="text-center hover:bg-slate-500 hover:text-white cursor-pointer rounded-lg p-2 transition-colors duration-200"
+                    >
+                      <div className="font-bold text-lg text-gray-900 dark:text-white hover:text-white">
+                        {profile?.following_count || 0}
+                      </div>
+                      <div className="text-gray-600 dark:text-gray-300 hover:text-white">Following</div>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Bio and Details */}

@@ -8,7 +8,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await requireAuth(request);
+    const user = await requireAuth();
 
     const deleted = await prisma.wishlistItem.deleteMany({
       where: {

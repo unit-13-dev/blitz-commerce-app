@@ -23,6 +23,25 @@ export async function GET(
                 },
               },
             },
+            returnReplaceRequests: {
+              orderBy: { requestedAt: "desc" },
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                  },
+                },
+                vendor: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                  },
+                },
+              },
+            },
           },
         },
         user: {
@@ -33,6 +52,30 @@ export async function GET(
           },
         },
         shippingAddress: true,
+        returnReplaceRequests: {
+          orderBy: { requestedAt: "desc" },
+          include: {
+            orderItem: {
+              include: {
+                product: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+            vendor: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 

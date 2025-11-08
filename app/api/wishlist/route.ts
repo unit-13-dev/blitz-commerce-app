@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get('productId');
-    const user = await requireAuth(request);
+    const user = await requireAuth();
 
     if (productId) {
       const item = await prisma.wishlistItem.findUnique({
@@ -45,7 +45,19 @@ export async function GET(request: Request) {
       ...item,
       product: {
         ...item.product,
-        image_url: item.product.images[0]?.imageUrl || item.product.imageUrl,
+        id: item.product.id,
+        name: item.product.name,
+        price: typeof item.product.price === 'string' ? parseFloat(item.product.price) : Number(item.product.price),
+        image_url: item.product.images[0]?.imageUrl || item.product.imageUrl || null,
+        imageUrl: item.product.images[0]?.imageUrl || item.product.imageUrl || null,
+        description: item.product.description || null,
+        category: item.product.category || null,
+        vendor_profile: item.product.vendor ? {
+          id: item.product.vendor.id,
+          full_name: item.product.vendor.fullName || '',
+          email: item.product.vendor.email,
+        } : null,
+        vendor: item.product.vendor,
       },
     }));
 
@@ -63,7 +75,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireAuth();
     const body = await request.json();
     const { productId } = body;
 

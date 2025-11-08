@@ -2,20 +2,31 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Package, MapPin, CreditCard, Clock, CheckCircle, Truck, XCircle, AlertCircle, Calendar, Timer } from "lucide-react";
+import { ArrowLeft, Package, MapPin, CreditCard, Clock, CheckCircle, Truck, XCircle, AlertCircle, Calendar, Timer, RotateCcw, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { apiClient } from "@/lib/api-client";
+import { useState } from "react";
 
 export default function OrderDetail() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['order', id],
@@ -28,6 +39,88 @@ export default function OrderDetail() {
   });
 
   const order = orderData?.data?.order;
+
+  // Return request mutation
+  const returnRequestMutation = useMutation({
+    mutationFn: async ({ orderItemId, reason }: { orderItemId: string; reason?: string }) => {
+      const { data } = await apiClient.post(`/orders/${id}/return`, {
+        orderItemId,
+        reason,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      toast({
+        title: "Return request submitted",
+        description: "Your return request has been submitted. Waiting for vendor approval.",
+      });
+      setReturnDialogOpen(false);
+      setReason('');
+      setSelectedItemId(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit return request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Replace request mutation
+  const replaceRequestMutation = useMutation({
+    mutationFn: async ({ orderItemId, reason }: { orderItemId: string; reason?: string }) => {
+      const { data } = await apiClient.post(`/orders/${id}/replace`, {
+        orderItemId,
+        reason,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      toast({
+        title: "Replace request submitted",
+        description: "Your replace request has been submitted. Waiting for vendor approval.",
+      });
+      setReplaceDialogOpen(false);
+      setReason('');
+      setSelectedItemId(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit replace request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleReturnRequest = (itemId: string) => {
+    setSelectedItemId(itemId);
+    setReturnDialogOpen(true);
+  };
+
+  const handleReplaceRequest = (itemId: string) => {
+    setSelectedItemId(itemId);
+    setReplaceDialogOpen(true);
+  };
+
+  const submitReturnRequest = () => {
+    if (!selectedItemId) return;
+    returnRequestMutation.mutate({ orderItemId: selectedItemId, reason });
+  };
+
+  const submitReplaceRequest = () => {
+    if (!selectedItemId) return;
+    replaceRequestMutation.mutate({ orderItemId: selectedItemId, reason });
+  };
+
+  const getRequestStatus = (requests: any[], type: 'return' | 'replace') => {
+    const request = requests?.find((r: any) => r.type === type);
+    if (!request) return null;
+    return request.status;
+  };
 
   if (isLoading) {
     return (
@@ -92,6 +185,19 @@ export default function OrderDetail() {
                       return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Cancelled</Badge>;
                     case 'rejected':
                       return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+                    case 'return_requested':
+                      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200"><RotateCcw className="w-3 h-3 mr-1" />Return Requested</Badge>;
+                    case 'replace_requested':
+                      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200"><RefreshCw className="w-3 h-3 mr-1" />Replace Requested</Badge>;
+                    case 'return_approved':
+                    case 'return_processed':
+                      return <Badge variant="default" className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Return Processed</Badge>;
+                    case 'replace_approved':
+                    case 'replace_processed':
+                      return <Badge variant="default" className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Replace Processed</Badge>;
+                    case 'return_rejected':
+                    case 'replace_rejected':
+                      return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Request Rejected</Badge>;
                     default:
                       return <Badge variant="secondary">{order.status}</Badge>;
                   }
@@ -160,29 +266,120 @@ export default function OrderDetail() {
                 Order Items
               </h2>
               <div className="space-y-4">
-                {order.items.map((item: any) => (
-                  <div key={item.id} className="flex items-center gap-4 pb-4 border-b last:border-0">
-                    <img
-                      src={item.productImageUrl || "/placeholder.svg"}
-                      alt={item.productName}
-                      className="w-20 h-20 object-cover rounded"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium">{item.productName}</p>
-                      <p className="text-sm text-gray-600">
-                        Quantity: {item.quantity}
-                      </p>
+                {order.items.map((item: any) => {
+                  const returnStatus = getRequestStatus(item.returnReplaceRequests, 'return');
+                  const replaceStatus = getRequestStatus(item.returnReplaceRequests, 'replace');
+                  const canReturn = item.product?.isReturnable && order.status === 'delivered' && !returnStatus;
+                  const canReplace = item.product?.isReplaceable && order.status === 'delivered' && !replaceStatus;
+                  const hasPendingRequest = returnStatus === 'pending' || replaceStatus === 'pending';
+                  
+                  return (
+                    <div key={item.id} className="pb-4 border-b last:border-0">
+                      <div className="flex items-center gap-4">
+                        <img
+                          src={item.productImageUrl || "/placeholder.svg"}
+                          alt={item.productName}
+                          className="w-20 h-20 object-cover rounded"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{item.productName}</p>
+                          <p className="text-sm text-gray-600">
+                            Quantity: {item.quantity}
+                          </p>
+                          {/* Return/Replace Status */}
+                          {(returnStatus || replaceStatus) && (
+                            <div className="mt-2 flex gap-2 flex-wrap">
+                              {returnStatus === 'pending' && (
+                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                  <RotateCcw className="w-3 h-3 mr-1" />
+                                  Return Pending
+                                </Badge>
+                              )}
+                              {returnStatus === 'approved' && (
+                                <Badge variant="default" className="bg-green-100 text-green-700">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Return Approved
+                                </Badge>
+                              )}
+                              {returnStatus === 'processed' && (
+                                <Badge variant="default" className="bg-green-600 text-white">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Return Processed
+                                </Badge>
+                              )}
+                              {returnStatus === 'rejected' && (
+                                <Badge variant="destructive">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Return Rejected
+                                </Badge>
+                              )}
+                              {replaceStatus === 'pending' && (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <RefreshCw className="w-3 h-3 mr-1" />
+                                  Replace Pending
+                                </Badge>
+                              )}
+                              {replaceStatus === 'approved' && (
+                                <Badge variant="default" className="bg-green-100 text-green-700">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Replace Approved
+                                </Badge>
+                              )}
+                              {replaceStatus === 'processed' && (
+                                <Badge variant="default" className="bg-green-600 text-white">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Replace Processed
+                                </Badge>
+                              )}
+                              {replaceStatus === 'rejected' && (
+                                <Badge variant="destructive">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Replace Rejected
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">
+                            ₹{typeof item.totalPrice === 'string' ? item.totalPrice : item.totalPrice.toString()}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            ₹{typeof item.unitPrice === 'string' ? item.unitPrice : item.unitPrice.toString()} each
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Return/Replace Actions */}
+                      {order.status === 'delivered' && (canReturn || canReplace) && !hasPendingRequest && (
+                        <div className="mt-3 flex gap-2">
+                          {canReturn && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReturnRequest(item.id)}
+                              className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                            >
+                              <RotateCcw className="w-4 h-4 mr-1" />
+                              Request Return
+                            </Button>
+                          )}
+                          {canReplace && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReplaceRequest(item.id)}
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-1" />
+                              Request Replace
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">
-                        ₹{typeof item.totalPrice === 'string' ? item.totalPrice : item.totalPrice.toString()}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        ₹{typeof item.unitPrice === 'string' ? item.unitPrice : item.unitPrice.toString()} each
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-6 pt-6 border-t space-y-2">
@@ -253,6 +450,78 @@ export default function OrderDetail() {
                 </div>
               </div>
             )}
+
+            {/* Return Request Dialog */}
+            <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request Return</DialogTitle>
+                  <DialogDescription>
+                    Please provide a reason for returning this item. The vendor will review your request.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label htmlFor="return-reason">Reason (Optional)</Label>
+                    <Textarea
+                      id="return-reason"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="E.g., Product damaged, Wrong item received, etc."
+                      rows={4}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={submitReturnRequest}
+                    disabled={returnRequestMutation.isPending}
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    {returnRequestMutation.isPending ? 'Submitting...' : 'Submit Request'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Replace Request Dialog */}
+            <Dialog open={replaceDialogOpen} onOpenChange={setReplaceDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request Replacement</DialogTitle>
+                  <DialogDescription>
+                    Please provide a reason for replacing this item. The vendor will review your request.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label htmlFor="replace-reason">Reason (Optional)</Label>
+                    <Textarea
+                      id="replace-reason"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="E.g., Product defective, Wrong size, etc."
+                      rows={4}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setReplaceDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={submitReplaceRequest}
+                    disabled={replaceRequestMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {replaceRequestMutation.isPending ? 'Submitting...' : 'Submit Request'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </Layout>
         <Footer />

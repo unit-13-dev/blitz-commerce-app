@@ -21,6 +21,14 @@ enum OrderStatus {
   delivered
   cancelled
   rejected
+  return_requested
+  replace_requested
+  return_approved
+  replace_approved
+  return_rejected
+  replace_rejected
+  return_processed
+  replace_processed
 }
 
 enum PaymentStatus {
@@ -50,6 +58,18 @@ enum KycStatus {
   pending
   approved
   rejected
+}
+
+enum ReturnReplaceRequestStatus {
+  pending
+  approved
+  rejected
+  processed
+}
+
+enum ReturnReplaceRequestType {
+  return
+  replace
 }
 
 enum EcommerceCategory {
@@ -106,6 +126,8 @@ model Profile {
   followers        Follow[]       @relation("Followers")
   vendorKycs       VendorKyc[]
   drafts           Draft[]
+  userReturnReplaceRequests ReturnReplaceRequest[] @relation("UserReturnReplaceRequests")
+  vendorReturnReplaceRequests ReturnReplaceRequest[] @relation("VendorReturnReplaceRequests")
 
   @@map("profiles")
 }
@@ -122,6 +144,8 @@ model Product {
   stockQuantity     Int      @default(0)
   isActive          Boolean  @default(true)
   groupOrderEnabled Boolean  @default(false)
+  isReturnable      Boolean  @default(false)
+  isReplaceable     Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -270,6 +294,7 @@ model Order {
   user            Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shippingAddress UserAddress? @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
   items           OrderItem[]
+  returnReplaceRequests ReturnReplaceRequest[]
 
   @@map("orders")
 }
@@ -287,8 +312,36 @@ model OrderItem {
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  returnReplaceRequests ReturnReplaceRequest[]
 
   @@map("order_items")
+}
+
+model ReturnReplaceRequest {
+  id                  String                     @id @default(uuid())
+  orderId             String
+  orderItemId         String
+  userId              String
+  vendorId            String
+  type                ReturnReplaceRequestType
+  status              ReturnReplaceRequestStatus @default(pending)
+  reason              String?
+  returnAmount        Decimal?                   @db.Decimal(10, 2)
+  returnPaymentStatus PaymentStatus              @default(pending)
+  requestedAt         DateTime                   @default(now())
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  rejectedReason      String?
+  processedAt         DateTime?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  user      Profile   @relation("UserReturnReplaceRequests", fields: [userId], references: [id], onDelete: Cascade)
+  vendor    Profile   @relation("VendorReturnReplaceRequests", fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("return_replace_requests")
 }
 
 model Post {

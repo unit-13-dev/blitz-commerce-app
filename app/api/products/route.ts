@@ -84,7 +84,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser(request);
+    const user = await getCurrentUser();
     if (!user) {
       return ApiResponseHandler.unauthorized();
     }
@@ -104,10 +104,20 @@ export async function POST(request: Request) {
       stockQuantity,
       isActive,
       groupOrderEnabled,
+      isReturnable,
+      isReplaceable,
       images,
       categories, // Dynamic categories (array of category IDs)
       discountTiers,
     } = body;
+
+    // Validate returnable/replaceable - at least one must be selected
+    if (isReturnable === undefined || isReplaceable === undefined) {
+      return ApiResponseHandler.badRequest("isReturnable and isReplaceable are required fields");
+    }
+    if (!isReturnable && !isReplaceable) {
+      return ApiResponseHandler.badRequest("At least one option must be selected: isReturnable or isReplaceable");
+    }
 
     // Validate and convert enum category if provided (optional)
     let validatedCategory = null;
@@ -173,6 +183,8 @@ export async function POST(request: Request) {
         stockQuantity: parseInt(stockQuantity) || 0,
         isActive: isActive !== false,
         groupOrderEnabled: groupOrderEnabled || false,
+        isReturnable: isReturnable === true,
+        isReplaceable: isReplaceable === true,
         images: images
           ? {
               create: images.map((img: any, index: number) => ({

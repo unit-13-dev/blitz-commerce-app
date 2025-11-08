@@ -21,44 +21,66 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const isVendor = profileRole === 'vendor' || profileRole === 'Vendor';
+  const isAdmin = currentUser?.role === 'admin' || profileRole === 'admin';
   const isViewingVendor = isVendor;
-  const canViewOrders = isOwnProfile; // Only show orders tab for own profile
+  // Show orders tab for own profile OR if admin viewing their own profile
+  const canViewOrders = isOwnProfile || (isAdmin && isOwnProfile);
+  // Show groups tab for own profile OR if admin
+  const canViewGroups = isOwnProfile || (isAdmin && isOwnProfile);
 
-  // Fetch posts
+  // Fetch posts - if admin viewing own profile, fetch all posts
   const { data: postsResponse, isLoading: postsLoading } = useQuery({
-    queryKey: ['user-posts', profileUserId],
+    queryKey: ['user-posts', profileUserId, isAdmin && isOwnProfile],
     queryFn: async () => {
-      const { data } = await apiClient.get('/posts', {
-        params: { userId: profileUserId, limit: 100 },
-      });
-      return data;
+      if (isAdmin && isOwnProfile) {
+        // Fetch all posts for admin
+        const { data } = await apiClient.get('/admin/posts');
+        return data;
+      } else {
+        // Fetch user-specific posts
+        const { data } = await apiClient.get('/posts', {
+          params: { userId: profileUserId, limit: 100 },
+        });
+        return data;
+      }
     },
     enabled: !!profileUserId,
   });
 
-  const posts = postsResponse?.data || [];
+  const posts = isAdmin && isOwnProfile 
+    ? (postsResponse?.data?.posts || [])
+    : (postsResponse?.data || []);
 
-  // Fetch groups (only for own profile)
+  // Fetch groups - if admin viewing own profile, fetch all groups
   const { data: userGroupsResponse, isLoading: groupsLoading } = useQuery({
-    queryKey: ['user-groups', profileUserId],
+    queryKey: ['user-groups', profileUserId, isAdmin && isOwnProfile],
     queryFn: async () => {
       const { data } = await apiClient.get('/groups', {
         params: {},
       });
       return data;
     },
-    enabled: isOwnProfile && !!profileUserId,
+    enabled: canViewGroups && !!profileUserId,
   });
 
-  const userGroups = (userGroupsResponse?.data?.groups || []).filter(
-    (group: any) => group.creatorId === profileUserId
-  );
+  // Filter groups based on whether admin or regular user
+  const userGroups = isAdmin && isOwnProfile
+    ? (userGroupsResponse?.data?.groups || []) // Show all groups for admin
+    : (userGroupsResponse?.data?.groups || []).filter(
+        (group: any) => group.creatorId === profileUserId
+      );
 
-  // Fetch orders - different logic for vendors vs users
+  // Fetch orders - different logic for vendors vs users vs admin
   const { data: ordersResponse, isLoading: ordersLoading } = useQuery({
-    queryKey: ['user-orders', profileUserId, isVendor],
+    queryKey: ['user-orders', profileUserId, isVendor, isAdmin && isOwnProfile],
     queryFn: async () => {
-      if (isVendor && currentUser?.id === profileUserId) {
+      if (isAdmin && isOwnProfile) {
+        // For admin, fetch all orders
+        const { data } = await apiClient.get('/orders', {
+          params: {},
+        });
+        return data;
+      } else if (isVendor && currentUser?.id === profileUserId) {
         // For vendors, fetch vendor orders (orders for their products)
         const { data } = await apiClient.get('/vendor/orders', {
           params: { status: 'all' },
@@ -75,9 +97,12 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
     enabled: canViewOrders && !!profileUserId && !!currentUser?.id,
   });
 
-  // Handle orders based on vendor or user
+  // Handle orders based on vendor, user, or admin
   let orders: any[] = [];
-  if (isVendor && currentUser?.id === profileUserId) {
+  if (isAdmin && isOwnProfile) {
+    // Admin sees all orders
+    orders = ordersResponse?.data?.orders || [];
+  } else if (isVendor && currentUser?.id === profileUserId) {
     // Vendor orders
     orders = ordersResponse?.data?.orders || [];
   } else {
@@ -90,9 +115,22 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
     <div className="max-w-4xl mx-auto px-4">
       <Tabs defaultValue="posts" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="posts">Posts</TabsTrigger>
-          {isOwnProfile && <TabsTrigger value="groups">Groups</TabsTrigger>}
-          {canViewOrders && <TabsTrigger value="orders">Orders</TabsTrigger>}
+          <TabsTrigger value="posts">
+            Posts
+            {isAdmin && isOwnProfile && ` (All)`}
+          </TabsTrigger>
+          {canViewGroups && (
+            <TabsTrigger value="groups">
+              Groups
+              {isAdmin && isOwnProfile && ` (All)`}
+            </TabsTrigger>
+          )}
+          {canViewOrders && (
+            <TabsTrigger value="orders">
+              Orders
+              {isAdmin && isOwnProfile && ` (All)`}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -135,7 +173,14 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
                           {post._count?.comments || 0}
                         </span>
                       </div>
-                      <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                        {isAdmin && isOwnProfile && post.user && (
+                          <span className="text-xs text-gray-400">
+                            by {post.user.fullName || post.user.email?.split('@')[0] || 'Unknown'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -149,7 +194,7 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
           )}
         </TabsContent>
 
-        {isOwnProfile && (
+        {canViewGroups && (
           <TabsContent value="groups">
             {groupsLoading ? (
               <div className="flex items-center justify-center py-12">
@@ -172,7 +217,11 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
                         />
                         <div className="flex-1">
                           <h4 className="font-medium text-sm">{group.name}</h4>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">Group</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {isAdmin && isOwnProfile && group.creator 
+                              ? `by ${group.creator.fullName || group.creator.email?.split('@')[0] || 'Unknown'}` 
+                              : 'Group'}
+                          </p>
                         </div>
                       </div>
                       
@@ -244,7 +293,7 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
                             <p className="text-sm text-gray-600 dark:text-gray-400">
                               {new Date(order.createdAt).toLocaleDateString()}
                             </p>
-                            {isVendorOrder && order.user && (
+                            {(isAdmin && isOwnProfile || isVendorOrder) && order.user && (
                               <p className="text-xs text-gray-500 mt-1">
                                 Customer: {order.user.fullName || order.user.email}
                               </p>
@@ -280,9 +329,52 @@ const SocialProfileTabs = ({ profileUserId, isOwnProfile, profileRole }: SocialP
         )}
 
         <TabsContent value="activity">
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            Activity feed coming soon
-          </div>
+          {isAdmin && isOwnProfile ? (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <h3 className="font-semibold text-blue-900 mb-4">Admin Dashboard Access</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  Access the full admin dashboard to manage users, products, orders, KYC requests, and more.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {posts.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Total Posts</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-green-600">
+                        {orders.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Total Orders</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {userGroups.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Total Groups</div>
+                    </CardContent>
+                  </Card>
+                </div>
+                <Button 
+                  onClick={() => router.push('/dashboard')}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Go to Admin Dashboard
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              Activity feed coming soon
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

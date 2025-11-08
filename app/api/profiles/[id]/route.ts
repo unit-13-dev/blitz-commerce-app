@@ -8,6 +8,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const currentUser = await getCurrentUser();
+    const isAdmin = currentUser?.role === 'admin' && currentUser?.id === id;
+    
     const profile = await prisma.profile.findUnique({
       where: { id },
       include: {
@@ -29,12 +32,33 @@ export async function GET(
       return ApiResponseHandler.notFound("Profile not found");
     }
 
+    // If admin viewing their own profile, get application-wide stats
+    let adminStats = null;
+    if (isAdmin) {
+      const [totalPosts, totalUsers, totalOrders, totalProducts, totalGroups] = await Promise.all([
+        prisma.post.count({ where: { status: 'published' } }),
+        prisma.profile.count(),
+        prisma.order.count(),
+        prisma.product.count(),
+        prisma.group.count(),
+      ]);
+
+      adminStats = {
+        totalPosts,
+        totalUsers,
+        totalOrders,
+        totalProducts,
+        totalGroups,
+      };
+    }
+
     // Add counts to profile object
     const profileWithCounts = {
       ...profile,
       posts_count: profile._count.posts,
       followers_count: profile._count.followers,
       following_count: profile._count.follows,
+      adminStats,
     };
 
     // Remove _count from response
@@ -53,7 +77,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser(request);
+    const user = await getCurrentUser();
 
     if (!user) {
       return ApiResponseHandler.unauthorized();

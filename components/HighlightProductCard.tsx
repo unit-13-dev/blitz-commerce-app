@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Heart, ShoppingCart, RotateCcw, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProductRating } from "@/hooks/useProductRating";
 import { motion } from "framer-motion";
@@ -19,6 +20,8 @@ interface HighlightProductCardProps {
     image_url?: string;
     category?: string;
     description?: string;
+    isReturnable?: boolean;
+    isReplaceable?: boolean;
     categories?: Array<{
       category?: {
         name?: string;
@@ -46,7 +49,7 @@ const HighlightProductCard = ({ product, vendor, index }: HighlightProductCardPr
       const { data } = await apiClient.get('/wishlist', {
         params: { productId: product.id },
       });
-      return !!data?.exists;
+      return !!data?.data?.exists;
     },
     enabled: !!user,
   });
@@ -147,6 +150,24 @@ const HighlightProductCard = ({ product, vendor, index }: HighlightProductCardPr
         </div>
         
         <CardContent className="p-6">
+          {/* Return & Replacement Badges - Highlighted */}
+          {(product.isReturnable || product.isReplaceable) && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {product.isReturnable && (
+                <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Returnable
+                </Badge>
+              )}
+              {product.isReplaceable && (
+                <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Replaceable
+                </Badge>
+              )}
+            </div>
+          )}
+
           {/* Product Categories */}
           {productCategories.length > 0 && (
             <div className="flex items-center gap-2 mb-3 flex-wrap">

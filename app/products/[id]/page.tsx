@@ -3,7 +3,8 @@
 import { useRouter, useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Heart, ShoppingCart, ArrowLeft } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Heart, ShoppingCart, ArrowLeft, RotateCcw, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
@@ -190,6 +191,38 @@ export default function ProductDetail() {
                 <p className="text-2xl font-semibold text-pink-600 mb-4">
                   ₹{product.price || '0'}
                 </p>
+                
+                {/* Return & Replacement Policy - Highlighted */}
+                {(product.isReturnable || product.isReplaceable) && (
+                  <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-4">
+                    <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+                      <RotateCcw className="w-4 h-4" />
+                      Return & Replacement Policy
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {product.isReturnable && (
+                        <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Returnable
+                        </Badge>
+                      )}
+                      {product.isReplaceable && (
+                        <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-white">
+                          <RefreshCw className="w-3 h-3 mr-1" />
+                          Replaceable
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-green-800 mt-2">
+                      {product.isReturnable && product.isReplaceable
+                        ? 'This product can be returned for a refund or replaced if defective.'
+                        : product.isReturnable
+                        ? 'This product can be returned for a refund or exchange.'
+                        : 'This product can be replaced if defective or damaged.'}
+                    </p>
+                  </div>
+                )}
+
                 {product.description && (
                   <p className="text-gray-600 whitespace-pre-wrap">{product.description}</p>
                 )}
