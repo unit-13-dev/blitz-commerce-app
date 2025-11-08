@@ -32,18 +32,19 @@ export async function getWorkflowGenAINode(businessId: string): Promise<Workflow
     throw new Error('GenAI Intent node not found in workflow. Please add and configure a GenAI Intent node.');
   }
 
-  // Check if GenAI node is configured
-  if (!genAINode.isConfigured) {
-    throw new Error('GenAI Intent node is not configured. Please configure the node in the workflow builder with an API key.');
+  // Validate GenAI config exists
+  if (!genAINode.genAIConfig) {
+    throw new Error('GenAI Intent node configuration is missing. Please configure the node in the workflow builder with an API key and model.');
   }
 
-  // Validate GenAI config has API key
-  if (!genAINode.genAIConfig?.apiKey) {
-    throw new Error('GenAI Intent node API key is missing. Please configure your API key (Perplexity or Google Gemini) in the GenAI node settings.');
+  // Validate GenAI config has API key (check if it exists and is not empty)
+  // Note: API key is encrypted in DB, but after decryption it should be a non-empty string
+  if (!genAINode.genAIConfig.apiKey || typeof genAINode.genAIConfig.apiKey !== 'string' || genAINode.genAIConfig.apiKey.trim().length === 0) {
+    throw new Error('GenAI Intent node API key is missing or invalid. Please configure your API key (Perplexity or Google Gemini) in the GenAI node settings.');
   }
   
   // Validate GenAI config has model
-  if (!genAINode.genAIConfig?.model) {
+  if (!genAINode.genAIConfig.model || typeof genAINode.genAIConfig.model !== 'string' || genAINode.genAIConfig.model.trim().length === 0) {
     throw new Error('GenAI Intent node model is missing. Please select a model in the GenAI node settings.');
   }
 
@@ -53,39 +54,12 @@ export async function getWorkflowGenAINode(businessId: string): Promise<Workflow
     throw new Error(`Unsupported model: "${genAINode.genAIConfig.model}". Supported models are: ${supportedModels.join(', ')}. Please update your GenAI node configuration.`);
   }
 
-  // Test the API key to ensure it actually works
-  // Note: This is async validation, so we test it here
-  // If the API key is invalid, we should mark the node as not configured
-  try {
-    const apiKeyTest = await testAPIKey(genAINode.genAIConfig);
-    if (!apiKeyTest.valid) {
-      // API key is invalid - mark node as not configured in database
-      // Import here to avoid circular dependencies
-      const { saveNodeConfiguration, loadNodeConfigurations } = await import('@/app/lib/db/node-configurations');
-      const configurations = await loadNodeConfigurations(workflow.id);
-      const nodeConfig = configurations[genAINode.id];
-      
-      if (nodeConfig) {
-        // Update to mark as not configured
-        await saveNodeConfiguration(
-          workflow.id,
-          genAINode.id,
-          'genai-intent',
-          nodeConfig,
-          false
-        );
-      }
-      
-      throw new Error(apiKeyTest.error || 'API key is invalid or not working. Please update your API key in the workflow builder.');
-    }
-  } catch (error) {
-    // If testAPIKey throws an error, check if it's our validation error
-    if (error instanceof Error && error.message.includes('API key')) {
-      throw error;
-    }
-    // Re-throw other errors
-    throw new Error(`Failed to validate API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  // Note: We DO NOT check isConfigured flag here
+  // We only check if API key and model exist in the configuration
+  // The isConfigured flag might be false if API key test failed during save, but we still want to try using it
+  // API key testing should only happen when explicitly requested (e.g., Test API button)
+  // This function is used by the chat POST endpoint, which will attempt to use the API key
+  // If the API key is invalid, the GenAI executor will throw an error which will be handled properly
 
   return {
     workflow,

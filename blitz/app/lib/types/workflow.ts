@@ -17,6 +17,13 @@ export type IntentType =
   | 'CANCEL_ORDER' 
   | 'FAQ_SUPPORT';
 
+// GenAI detected intent types (from GenAI node output)
+export type GenAIIntent = 
+  | 'general_query' 
+  | 'cancellation' 
+  | 'order_query' 
+  | 'refund_query';
+
 export interface APIConfig {
   name: string;
   baseUrl: string;

@@ -70,14 +70,38 @@ function decryptConfigData(configData: Record<string, unknown>): NodeConfigurati
     const genAIConfig = configData.genAIConfig as Record<string, unknown>;
     if (genAIConfig.apiKey && typeof genAIConfig.apiKey === 'string') {
       try {
-        decrypted.genAIConfig = {
-          ...genAIConfig,
-          apiKey: decryptAPIKey(genAIConfig.apiKey as string),
-        } as GenAIConfig;
+        const encryptedKey = genAIConfig.apiKey as string;
+        
+        // Check if the key looks encrypted (should contain colons from our encryption format: salt:iv:encrypted)
+        // If it doesn't contain colons, it might already be decrypted or in a different format
+        if (encryptedKey.includes(':')) {
+          // Try to decrypt
+          const decryptedKey = decryptAPIKey(encryptedKey);
+          decrypted.genAIConfig = {
+            ...genAIConfig,
+            apiKey: decryptedKey,
+          } as GenAIConfig;
+          
+          console.log('[decryptConfigData] Successfully decrypted GenAI API key:', {
+            encryptedLength: encryptedKey.length,
+            decryptedLength: decryptedKey.length,
+            hasModel: !!genAIConfig.model,
+            model: genAIConfig.model,
+          });
+        } else {
+          // Key doesn't look encrypted, use as-is (might be plain text for testing or already decrypted)
+          console.warn('[decryptConfigData] GenAI API key does not appear to be encrypted (no colons found), using as-is');
+          decrypted.genAIConfig = genAIConfig as GenAIConfig;
+        }
       } catch (error) {
-        console.error('[decryptConfigData] Failed to decrypt GenAI API key:', error);
-        // Keep encrypted key if decryption fails
-        decrypted.genAIConfig = genAIConfig as GenAIConfig;
+        console.error('[decryptConfigData] Failed to decrypt GenAI API key:', {
+          error: error instanceof Error ? error.message : String(error),
+          apiKeyLength: (genAIConfig.apiKey as string).length,
+          apiKeyPrefix: (genAIConfig.apiKey as string).substring(0, 20),
+        });
+        // Re-throw the error instead of keeping encrypted key
+        // This ensures we fail fast and don't try to use an encrypted key
+        throw new Error(`Failed to decrypt GenAI API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     } else {
       decrypted.genAIConfig = genAIConfig as GenAIConfig;

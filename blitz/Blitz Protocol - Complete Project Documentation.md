@@ -1254,20 +1254,20 @@ export function WorkflowCanvas({ workflowId, initialNodes, initialEdges }: Workf
   };
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
       onNodesDelete={handleModuleDeletion}
       connectionMode={ConnectionMode.Loose}
       deleteKeyCode={['Backspace', 'Delete']}
       isValidConnection={validateConnection}
     >
-      <Background />
+          <Background />
       <Controls />
       <MiniMap />
-    </ReactFlow>
+        </ReactFlow>
     <button className="add-module">+ Add Module</button>
     <NodeAddModal ... />
     <NodeConfigPanel ... />
@@ -1433,7 +1433,7 @@ export function encryptAPIKey(apiKey: string): string {
   const cipher = createCipheriv(ALGORITHM, key, iv);
   let encrypted = cipher.update(apiKey, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-
+  
   // Return format: salt:iv:encrypted (all in hex)
   return `${salt.toString('hex')}:${iv.toString('hex')}:${encrypted}`;
 }
@@ -1463,7 +1463,7 @@ export function decryptAPIKey(encryptedData: string): string {
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
-
+  
   return decrypted;
 }
 ```
