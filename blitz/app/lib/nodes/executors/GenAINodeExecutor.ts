@@ -180,8 +180,8 @@ export class GenAINodeExecutor {
     }
 
     // Determine response method
-    const method: 'GENAI_TO_FRONTEND' | 'USER_TO_BLITZ' =
-      detectedIntent === 'general_query' ? 'GENAI_TO_FRONTEND' : 'USER_TO_BLITZ';
+    const method: 'GENAI_TO_FRONTEND' | 'FRONTEND_TO_BLITZ' =
+      detectedIntent === 'general_query' ? 'GENAI_TO_FRONTEND' : 'FRONTEND_TO_BLITZ';
 
     // Log for debugging
     console.log('[GenAINodeExecutor] Execution result:', {

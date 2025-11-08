@@ -5,7 +5,7 @@ import { getWorkflowGenAINode } from '@/app/lib/nodes/utils/workflow-loader';
 import { GenAINodeExecutor } from '@/app/lib/nodes/executors';
 import { ExecutionContext } from '@/app/lib/nodes/types/execution';
 
-export type CommunicationMethod = 'USER_TO_BLITZ' | 'MODULE_TO_FRONTEND' | 'GENAI_TO_FRONTEND';
+export type CommunicationMethod = 'FRONTEND_TO_BLITZ' | 'MODULE_TO_FRONTEND' | 'GENAI_TO_FRONTEND';
 
 export type ChatResponse = {
   method: CommunicationMethod;
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     if (!userId) {
       return Response.json(
-        { error: 'Unauthorized', method: 'USER_TO_BLITZ' as CommunicationMethod },
+        { error: 'Unauthorized', method: 'FRONTEND_TO_BLITZ' as CommunicationMethod },
         { status: 401 }
       );
     }
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
     if (!message || typeof message !== 'string') {
       return Response.json(
-        { error: 'Message is required', method: 'USER_TO_BLITZ' as CommunicationMethod },
+        { error: 'Message is required', method: 'FRONTEND_TO_BLITZ' as CommunicationMethod },
         { status: 400 }
       );
     }
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error: error instanceof Error ? error.message : 'Failed to load workflow',
-          method: 'USER_TO_BLITZ' as CommunicationMethod,
+          method: 'FRONTEND_TO_BLITZ' as CommunicationMethod,
         },
         { status: 400 }
       );
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error: 'GenAI Intent node not found in workflow. Please add and configure a GenAI Intent node.',
-          method: 'USER_TO_BLITZ' as CommunicationMethod,
+          method: 'FRONTEND_TO_BLITZ' as CommunicationMethod,
         },
         { status: 400 }
       );
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
         return Response.json(
           {
             error: execError.message || 'GenAI node execution failed',
-            method: 'USER_TO_BLITZ' as CommunicationMethod,
+            method: 'FRONTEND_TO_BLITZ' as CommunicationMethod,
             debug: {
               businessId: targetBusinessId,
               workflowId: workflow.id,
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error: error instanceof Error ? error.message : 'Failed to process message',
-          method: 'USER_TO_BLITZ' as CommunicationMethod,
+          method: 'FRONTEND_TO_BLITZ' as CommunicationMethod,
         },
         { status: 500 }
       );
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error: error instanceof Error ? error.message : 'Internal server error',
-        method: 'USER_TO_BLITZ' as CommunicationMethod,
+        method: 'FRONTEND_TO_BLITZ' as CommunicationMethod,
       },
       { status: 500 }
     );

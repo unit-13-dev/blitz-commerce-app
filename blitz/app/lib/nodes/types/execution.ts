@@ -18,7 +18,7 @@ export interface GenAIExecutionResult {
   intent: 'general_query' | 'cancellation' | 'order_query' | 'refund_query';
   response: string;
   extractedData?: Record<string, unknown>;
-  method: 'GENAI_TO_FRONTEND' | 'USER_TO_BLITZ';
+  method: 'GENAI_TO_FRONTEND' | 'FRONTEND_TO_BLITZ';
 }
 
 export interface RouterExecutionResult {

@@ -232,7 +232,7 @@ const result = await executor.execute(message, {
 //   intent: "order_query" | "cancellation" | "refund_query" | "general_query",
 //   response: "AI-generated response",
 //   extractedData: { orderId: "...", product: "..." },
-//   method: "GENAI_TO_FRONTEND" | "USER_TO_BLITZ"
+//   method: "GENAI_TO_FRONTEND" | "FRONTEND_TO_BLITZ"
 // }
 ```
 
@@ -253,7 +253,7 @@ const result = await executor.execute(message, {
   extractedData: {
     product: "phone case"
   },
-  method: "USER_TO_BLITZ"  // Routes to module for order tracking
+  method: "FRONTEND_TO_BLITZ"  // Routes to module for order tracking
 }
 ```
 
@@ -683,7 +683,7 @@ export async function detectIntent(
   intent: 'general_query' | 'cancellation' | 'order_query' | 'refund_query';
   response: string;
   extractedData?: Record<string, unknown>;
-  method: 'GENAI_TO_FRONTEND' | 'USER_TO_BLITZ';
+  method: 'GENAI_TO_FRONTEND' | 'FRONTEND_TO_BLITZ';
 }> {
   // Load workflow with node configurations (includes decrypted API keys)
   const { nodes } = await loadWorkflowWithConfigurations(workflowId);

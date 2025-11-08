@@ -11,7 +11,7 @@ type Message = {
 };
 
 type ChatResponse = {
-  method: 'USER_TO_BLITZ' | 'MODULE_TO_FRONTEND' | 'GENAI_TO_FRONTEND';
+  method: 'FRONTEND_TO_BLITZ' | 'MODULE_TO_FRONTEND' | 'GENAI_TO_FRONTEND';
   intent?: 'general_query' | 'cancellation' | 'order_query' | 'refund_query';
   response?: string;
   data?: Record<string, unknown>;
