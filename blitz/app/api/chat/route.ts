@@ -102,9 +102,20 @@ export async function POST(request: Request) {
     let executionResult;
     try {
       // Create NodeData from WorkflowNodeWithConfig
+      // The genAIConfig already has the decrypted API key from the database
       const nodeData = {
         genAIConfig: genAINode.genAIConfig,
       };
+      
+      // Log for debugging (without exposing the actual API key)
+      console.log('[Chat API] Executing GenAI node:', {
+        businessId: targetBusinessId,
+        workflowId: workflow.id,
+        nodeId: genAINode.id,
+        model: genAINode.genAIConfig?.model,
+        hasApiKey: !!genAINode.genAIConfig?.apiKey,
+        apiKeyPrefix: genAINode.genAIConfig?.apiKey ? genAINode.genAIConfig.apiKey.substring(0, Math.min(10, genAINode.genAIConfig.apiKey.length)) + '...' : 'none',
+      });
       
       const executor = new GenAINodeExecutor(nodeData);
       executionResult = await executor.execute(message, executionContext);
@@ -181,14 +192,68 @@ export async function POST(request: Request) {
   }
 }
 
-// Test endpoint for debugging
-export async function GET() {
+// Test endpoint for debugging - checks if the business workflow has a configured GenAI node
+export async function GET(request: Request) {
   try {
-    return Response.json({
-      status: 'success',
-      message: 'Chat API is available',
-      timestamp: new Date().toISOString(),
-    });
+    const { userId } = await auth();
+
+    if (!userId) {
+      return Response.json(
+        {
+          status: 'error',
+          error: 'Unauthorized',
+        },
+        { status: 401 }
+      );
+    }
+
+    // Get businessId from query parameters
+    const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
+
+    if (!businessId) {
+      return Response.json(
+        {
+          status: 'error',
+          error: 'businessId is required',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get or create business for user
+    const clerk = await clerkClient();
+    const clerkUser = await clerk.users.getUser(userId);
+    const { business: userBusiness } = await ensureBusinessForUser(clerkUser);
+
+    // Use requested business ID if provided (for demo), otherwise use user's business
+    const targetBusinessId = businessId || userBusiness.id;
+
+    // Load workflow and GenAI node for the target business
+    try {
+      const workflowGenAI = await getWorkflowGenAINode(targetBusinessId);
+      
+      // If we get here, the workflow and GenAI node are configured
+      return Response.json({
+        status: 'success',
+        message: 'Chat API is ready. GenAI node is configured.',
+        timestamp: new Date().toISOString(),
+        businessId: targetBusinessId,
+        workflowId: workflowGenAI.workflow.id,
+      });
+    } catch (error) {
+      // Workflow or GenAI node is not configured
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      return Response.json(
+        {
+          status: 'error',
+          error: errorMessage,
+          message: 'Chat API is not ready. ' + errorMessage,
+        },
+        { status: 400 }
+      );
+    }
   } catch (error) {
     return Response.json(
       {

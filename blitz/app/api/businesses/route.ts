@@ -43,7 +43,11 @@ export async function GET() {
             try {
               const { nodes } = await loadWorkflowWithConfigurations(workflow.id);
               const genAINode = nodes.find((node) => node.type === 'genai-intent');
-              hasGenAINode = !!genAINode && !!genAINode.isConfigured && !!genAINode.genAIConfig?.apiKey;
+              // Check if GenAI node is fully configured (has API key and model)
+              hasGenAINode = !!genAINode && 
+                            !!genAINode.isConfigured && 
+                            !!genAINode.genAIConfig?.apiKey && 
+                            !!genAINode.genAIConfig?.model;
             } catch (error) {
               // If loading configurations fails, assume no GenAI node
               hasGenAINode = false;

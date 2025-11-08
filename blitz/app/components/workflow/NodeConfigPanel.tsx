@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Node } from '@xyflow/react';
 import { NodeData, APIConfig, ModuleType, IntentType, GenAIConfig, RouterConfig, ModuleConfig } from '@/app/lib/types/workflow';
+import { genaiNodeConfig, getGroupedOptions, getModelLabel } from '@/app/lib/nodes/configs/genai-node.config';
 
 interface NodeConfigPanelProps {
   node: Node;
@@ -91,17 +92,27 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Edit mode state for GenAI config
+  const [isEditingGenAI, setIsEditingGenAI] = useState(false);
+  // Store original config when entering edit mode
+  const [originalGenAIConfig, setOriginalGenAIConfig] = useState<GenAIConfig | null>(null);
 
   // Update state when nodeConfig changes (e.g., when switching between nodes)
   useEffect(() => {
     if (nodeConfig) {
-      if (nodeConfig?.genAIConfig) {
-        setGenAIConfig((prev) => ({
-          model: nodeConfig.genAIConfig?.model || '',
-          // Don't restore API key from config for security - user must re-enter
-          // Only preserve if user is currently typing
-          apiKey: prev.apiKey || '',
-        }));
+      if (nodeConfig?.genAIConfig && node.type === 'genai-intent') {
+        setGenAIConfig((prev) => {
+          // Only update if we're not in edit mode (to preserve user input)
+          if (isEditingGenAI) {
+            return prev;
+          }
+          return {
+            model: nodeConfig.genAIConfig?.model || '',
+            // Don't restore API key from config for security - user must re-enter
+            apiKey: '',
+          };
+        });
       }
       if (nodeConfig.routerConfig) {
         setRouterConfig(nodeConfig.routerConfig);
@@ -114,14 +125,18 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
       }
     } else {
       // Reset to defaults if no config exists
-      if (node.type === 'genai-intent') {
-        setGenAIConfig({
-          model: '',
-          apiKey: '',
-        });
+      if (node.type === 'genai-intent' && !isEditingGenAI) {
+        setGenAIConfig(genaiNodeConfig.getDefaultConfig());
       }
     }
-  }, [nodeConfig, node.type]);
+  }, [nodeConfig, node.type, isEditingGenAI]);
+  
+  // Reset edit mode when switching nodes (separate effect to avoid conflicts)
+  useEffect(() => {
+    setIsEditingGenAI(false);
+    setOriginalGenAIConfig(null);
+    setTestResult(null);
+  }, [node.id]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -130,18 +145,24 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
       let isConfigured = false;
 
       if (node.type === 'genai-intent') {
+        // Use config definition for validation and configuration check
+        const config = genaiNodeConfig;
+        
         // If API key is empty but we have an existing config, keep the existing key
         let finalGenAIConfig: GenAIConfig = {
-          model: genAIConfig.model,
+          model: genAIConfig.model || '',
           apiKey: genAIConfig.apiKey || nodeConfig?.genAIConfig?.apiKey || '',
         };
-        // Only save if both model and API key are present
-        if (!finalGenAIConfig.model || !finalGenAIConfig.apiKey) {
-          throw new Error('Both model and API key are required');
+        
+        // Validate using config definition (pass hasExistingApiKey to allow empty API key if existing one is present)
+        const validation = config.validate(finalGenAIConfig, hasExistingApiKey);
+        if (!validation.valid) {
+          throw new Error(validation.errors.join(', '));
         }
+        
         configToSave = { genAIConfig: finalGenAIConfig };
-        // Consider configured if we have an API key (either new or existing) and a model
-        isConfigured = !!(finalGenAIConfig.apiKey && finalGenAIConfig.model);
+        // Use config definition to determine if configured
+        isConfigured = config.isConfigured(finalGenAIConfig, hasExistingApiKey);
       } else if (node.type === 'router') {
         configToSave = { routerConfig };
         isConfigured = Object.keys(routerConfig.intentMappings || {}).length > 0;
@@ -177,16 +198,10 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
         return;
       }
 
-      // Ensure we have a model selected
-      if (!genAIConfig.model) {
-        setTestResult({
-          success: false,
-          message: 'Please select a model before testing.',
-        });
-        setIsTesting(false);
-        return;
-      }
-
+      // In view mode, use the config from DB (no need to send new values)
+      // In edit mode, send new values if provided
+      const isInEditMode = node.type === 'genai-intent' && isEditingGenAI;
+      
       // Call API endpoint to test GenAI configuration
       // The API will load the config from DB (with decrypted API key) and merge with any new values
       const response = await fetch('/api/nodes/test-genai', {
@@ -198,10 +213,10 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
           workflowId,
           nodeId: node.id,
           testMessage: 'Hello, where is my order?',
-          // Only send new API key if user is entering one (not if using existing)
-          newApiKey: genAIConfig.apiKey || undefined,
-          // Send new model if selected
-          newModel: genAIConfig.model || undefined,
+          // Only send new API key if in edit mode and user is entering one
+          newApiKey: isInEditMode ? (genAIConfig.apiKey || undefined) : undefined,
+          // Only send new model if in edit mode and selected
+          newModel: isInEditMode ? (genAIConfig.model || undefined) : undefined,
         }),
       });
 
@@ -230,6 +245,55 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
   };
 
   if (node.type === 'genai-intent') {
+    const config = genaiNodeConfig;
+    // Check if node is actually configured (has saved config in DB)
+    const nodeIsConfigured = !!nodeConfig?.genAIConfig?.apiKey && !!nodeConfig?.genAIConfig?.model;
+    const currentModel = nodeConfig?.genAIConfig?.model || '';
+    
+    // Determine if we should show view mode or edit mode
+    // Show edit mode if: not configured yet OR explicitly in edit mode
+    const shouldShowEditMode = !nodeIsConfigured || isEditingGenAI;
+
+    // Handle entering edit mode
+    const handleEditClick = () => {
+      // Store current config as original
+      setOriginalGenAIConfig({
+        model: nodeConfig?.genAIConfig?.model || '',
+        apiKey: '', // Don't store actual API key
+      });
+      setIsEditingGenAI(true);
+      // Reset local state to current config
+      setGenAIConfig({
+        model: nodeConfig?.genAIConfig?.model || '',
+        apiKey: '', // Start with empty API key
+      });
+      setTestResult(null); // Clear test results
+    };
+
+    // Handle canceling edit mode
+    const handleCancelEdit = () => {
+      setIsEditingGenAI(false);
+      // Restore to original config
+      if (originalGenAIConfig) {
+        setGenAIConfig(originalGenAIConfig);
+      } else if (nodeConfig?.genAIConfig) {
+        setGenAIConfig({
+          model: nodeConfig.genAIConfig.model || '',
+          apiKey: '',
+        });
+      } else {
+        setGenAIConfig(config.getDefaultConfig());
+      }
+      setOriginalGenAIConfig(null);
+      setTestResult(null);
+    };
+
+    // Handle save - exit edit mode after saving
+    const handleSaveAndExit = async () => {
+      await handleSave();
+      setIsEditingGenAI(false);
+      setOriginalGenAIConfig(null);
+    };
 
     return (
       <div 
@@ -237,7 +301,7 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between border-b border-gray-200 pb-4">
-          <h2 className={headingClass}>GenAI Intent Configuration</h2>
+          <h2 className={headingClass}>{config.title}</h2>
           <button 
             onClick={onClose} 
             className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" 
@@ -250,92 +314,280 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
         </div>
 
         <div className="space-y-5 text-sm">
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-            <p className="font-medium">ℹ️ Configuration Info</p>
-            <p className="mt-1">Enter your API key (Perplexity or Google Gemini) to enable intent detection. The API key will be encrypted and stored securely.</p>
-          </div>
+          {/* Render info sections */}
+          {config.sections.map((section, idx) => {
+            const bgColor = 
+              section.type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+              section.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+              section.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+              'bg-red-50 border-red-200 text-red-800';
+            
+            const icon = 
+              section.type === 'info' ? 'ℹ️' :
+              section.type === 'warning' ? '⚠️' :
+              section.type === 'success' ? '✓' :
+              '✗';
 
-          <div>
-            <label className={labelClass}>API Key *</label>
-            {hasExistingApiKey && !genAIConfig.apiKey && (
-              <div className="mb-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
-                <div className="font-medium">✓ API key is already configured</div>
-                <div className="mt-1">Enter a new API key below to update it, or leave empty to keep the existing key.</div>
+            return (
+              <div key={idx} className={`rounded-lg border px-3 py-2 text-xs ${bgColor}`}>
+                <p className="font-medium">{icon} {section.title}</p>
+                {section.description && (
+                  <p className="mt-1">{section.description}</p>
+                )}
               </div>
-            )}
-            <input
-              type="password"
-              value={genAIConfig.apiKey || ''}
-              onChange={(e) =>
-                setGenAIConfig({ ...genAIConfig, apiKey: e.target.value })
-              }
-              placeholder={hasExistingApiKey ? "Leave empty to keep existing key, or enter new key" : "pplx-... or AIza... (from Google AI Studio)"}
-              className={inputClass}
-              required={!hasExistingApiKey}
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Your API key. For Perplexity, keys start with &quot;pplx-&quot;. For Google Gemini, get your key from <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>. {hasExistingApiKey ? 'Leave empty to keep existing key.' : 'Required for intent detection.'}
-            </p>
-          </div>
+            );
+          })}
 
-          <div>
-            <label className={labelClass}>Model</label>
-            <select
-              value={genAIConfig.model || ''}
-              onChange={(e) =>
-                setGenAIConfig({ ...genAIConfig, model: e.target.value })
+          {/* Render fields from config */}
+          {config.fields.map((field) => {
+            const fieldValue = genAIConfig[field.name] as string | undefined;
+            const isApiKeyField = field.name === 'apiKey';
+            const isModelField = field.name === 'model';
+            
+            // In view mode: show masked API key and read-only model
+            // In edit mode: show editable fields
+            if (!shouldShowEditMode) {
+              // VIEW MODE
+              if (isApiKeyField && hasExistingApiKey) {
+                // Show masked API key
+                return (
+                  <div key={field.name}>
+                    <label className={labelClass}>
+                      {field.label} {field.required && '*'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value="****"
+                        readOnly
+                        className={`${inputClass} bg-gray-50 cursor-not-allowed`}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      API key is configured and encrypted. Click &quot;Edit Config&quot; to update.
+                    </p>
+                  </div>
+                );
+              } else if (isModelField && currentModel) {
+                // Show read-only model
+                return (
+                  <div key={field.name}>
+                    <label className={labelClass}>
+                      {field.label} {field.required && '*'}
+                    </label>
+                    <input
+                      type="text"
+                      value={getModelLabel(currentModel)}
+                      readOnly
+                      className={`${inputClass} bg-gray-50 cursor-not-allowed`}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      {field.description}
+                    </p>
+                  </div>
+                );
+              } else {
+                // Not configured yet - show empty state
+                return null;
               }
-              className={inputClass}
-            >
-              <option value="">Select a model</option>
-              <optgroup label="Perplexity Models">
-                <option value="sonar-pro">Perplexity Sonar Pro</option>
-              </optgroup>
-              <optgroup label="Google Gemini Models">
-                <option value="gemini-pro">Gemini Pro</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-              </optgroup>
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              Select the AI model for intent detection. Perplexity models use keys starting with &quot;pplx-&quot;, Gemini models use keys from Google AI Studio.
-            </p>
-          </div>
+            } else {
+              // EDIT MODE
+              const showExistingKeyNotice = isApiKeyField && hasExistingApiKey && !genAIConfig.apiKey;
 
-          {/* Test Button */}
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={handleTestGenAI}
-              disabled={isTesting || (!genAIConfig.apiKey && !hasExistingApiKey) || !genAIConfig.model}
-              className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-            >
-              {isTesting ? 'Testing...' : 'Test Configuration'}
-            </button>
-            {testResult && (
-              <div
-                className={`rounded-md px-3 py-2 text-xs ${
-                  testResult.success
-                    ? 'bg-green-50 text-green-800'
-                    : 'bg-red-50 text-red-800'
-                }`}
+              return (
+                <div key={field.name}>
+                  <label className={labelClass}>
+                    {field.label} {field.required && '*'}
+                  </label>
+                  
+                  {/* Show existing API key notice */}
+                  {showExistingKeyNotice && (
+                    <div className="mb-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+                      <div className="font-medium">✓ API key is already configured</div>
+                      <div className="mt-1">Enter a new API key below to update it, or leave empty to keep the existing key.</div>
+                    </div>
+                  )}
+
+                  {/* Render input based on field type */}
+                  {field.type === 'password' || field.type === 'text' ? (
+                    <input
+                      type={field.type}
+                      value={fieldValue || ''}
+                      onChange={(e) => {
+                        setGenAIConfig({ ...genAIConfig, [field.name]: e.target.value });
+                      }}
+                      placeholder={
+                        isApiKeyField && hasExistingApiKey
+                          ? "Leave empty to keep existing key, or enter new key"
+                          : field.placeholder
+                      }
+                      className={inputClass}
+                      required={field.required && !(isApiKeyField && hasExistingApiKey)}
+                    />
+                  ) : field.type === 'select' ? (
+                    <select
+                      value={fieldValue || ''}
+                      onChange={(e) => {
+                        setGenAIConfig({ ...genAIConfig, [field.name]: e.target.value });
+                      }}
+                      className={inputClass}
+                    >
+                      {field.options && (() => {
+                        const grouped = getGroupedOptions(field);
+                        const groups = Object.keys(grouped).filter(g => g !== '');
+                        
+                        return (
+                          <>
+                            {grouped[''] && grouped[''].map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                            {groups.map((groupName) => (
+                              <optgroup key={groupName} label={groupName}>
+                                {grouped[groupName].map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </select>
+                  ) : null}
+
+                  {/* Field description/help text */}
+                  {(field.description || field.helpText) && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {field.description}
+                      {isApiKeyField && (
+                        <>
+                          {' '}For Perplexity, keys start with &quot;pplx-&quot;. For Google Gemini, get your key from{' '}
+                          <a 
+                            href="https://aistudio.google.com/api-keys" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 hover:underline"
+                          >
+                            Google AI Studio
+                          </a>.
+                          {hasExistingApiKey && ' Leave empty to keep existing key.'}
+                        </>
+                      )}
+                    </p>
+                  )}
+
+                  {/* Field validation errors - only show in edit mode */}
+                  {field.validation?.custom && fieldValue && (
+                    (() => {
+                      const error = field.validation.custom(fieldValue);
+                      return error ? (
+                        <p className="mt-1 text-xs text-red-600">{error}</p>
+                      ) : null;
+                    })()
+                  )}
+                </div>
+              );
+            }
+          })}
+
+          {/* VIEW MODE: Test Button and Edit Config Button */}
+          {!shouldShowEditMode && nodeIsConfigured && (
+            <>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleTestGenAI}
+                  disabled={isTesting}
+                  className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {isTesting ? 'Testing...' : 'Test Configuration'}
+                </button>
+                {testResult && (
+                  <div
+                    className={`rounded-md px-3 py-2 text-xs ${
+                      testResult.success
+                        ? 'bg-green-50 text-green-800'
+                        : 'bg-red-50 text-red-800'
+                    }`}
+                  >
+                    {testResult.success ? '✓' : '✗'} {testResult.message}
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={handleEditClick}
+                className="w-full rounded-md border border-slate-900 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
               >
-                {testResult.success ? '✓' : '✗'} {testResult.message}
-              </div>
-            )}
-          </div>
-
-          <button 
-            onClick={handleSave} 
-            disabled={isSaving || (!genAIConfig.apiKey && !hasExistingApiKey) || !genAIConfig.model}
-            className={`${buttonPrimaryClass} ${isSaving || (!genAIConfig.apiKey && !hasExistingApiKey) || !genAIConfig.model ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isSaving ? 'Saving...' : 'Save configuration'}
-          </button>
-          {!genAIConfig.apiKey && !hasExistingApiKey && (
-            <p className="text-xs text-red-600">API key is required</p>
+                Edit Config
+              </button>
+            </>
           )}
-          {!genAIConfig.model && (
-            <p className="text-xs text-red-600">Model selection is required</p>
+
+          {/* EDIT MODE: Save and Cancel Buttons */}
+          {shouldShowEditMode && (
+            <>
+              {/* Validation errors */}
+              {(() => {
+                const validation = config.validate(genAIConfig, hasExistingApiKey);
+                return !validation.valid && validation.errors.length > 0 ? (
+                  <div className="space-y-1">
+                    {validation.errors.map((error, idx) => (
+                      <p key={idx} className="text-xs text-red-600">{error}</p>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleCancelEdit}
+                  className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveAndExit}
+                  disabled={isSaving || (() => {
+                    const validation = config.validate(genAIConfig, hasExistingApiKey);
+                    return !validation.valid;
+                  })()}
+                  className={`flex-1 ${buttonPrimaryClass} ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isSaving ? 'Saving...' : 'Save configuration'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* NEW CONFIG: Show save button if not configured yet */}
+          {!shouldShowEditMode && !nodeIsConfigured && (
+            <>
+              {/* Validation errors */}
+              {(() => {
+                const validation = config.validate(genAIConfig, hasExistingApiKey);
+                return !validation.valid && validation.errors.length > 0 ? (
+                  <div className="space-y-1">
+                    {validation.errors.map((error, idx) => (
+                      <p key={idx} className="text-xs text-red-600">{error}</p>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              <button 
+                onClick={handleSave}
+                disabled={isSaving || (() => {
+                  const validation = config.validate(genAIConfig, hasExistingApiKey);
+                  return !validation.valid;
+                })()}
+                className={`${buttonPrimaryClass} ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isSaving ? 'Saving...' : 'Save configuration'}
+              </button>
+            </>
           )}
         </div>
       </div>
