@@ -79,15 +79,21 @@ export async function POST(request: Request) {
     // Get or create chat session
     const chatSession = await getOrCreateChatSession(user.id, targetBusinessId);
 
-    // Save user message
-    await saveChatMessage(chatSession.id, 'user', message);
-
-    // Get chat history for context
+    // Get chat history BEFORE saving the current message (to avoid duplication)
+    // This gives us the conversation context up to this point
     const history = await getChatHistory(chatSession.id);
-    const conversationHistory = history.map((msg) => ({
-      role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: msg.content,
-    }));
+    
+    // Format conversation history for AI SDK
+    // Filter out any invalid messages and ensure proper format
+    const conversationHistory = history
+      .filter((msg) => msg.content && msg.content.trim().length > 0)
+      .map((msg) => ({
+        role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: msg.content.trim(),
+      }));
+
+    // Save user message AFTER getting history (so it doesn't duplicate)
+    await saveChatMessage(chatSession.id, 'user', message);
 
     // Create execution context
     const executionContext: ExecutionContext = {
@@ -115,7 +121,14 @@ export async function POST(request: Request) {
         model: genAINode.genAIConfig?.model,
         hasApiKey: !!genAINode.genAIConfig?.apiKey,
         apiKeyPrefix: genAINode.genAIConfig?.apiKey ? genAINode.genAIConfig.apiKey.substring(0, Math.min(10, genAINode.genAIConfig.apiKey.length)) + '...' : 'none',
+        conversationHistoryLength: conversationHistory.length,
+        messageLength: message.length,
       });
+      
+      // Log conversation history structure
+      if (conversationHistory.length > 0) {
+        console.log('[Chat API] Conversation history roles:', conversationHistory.map((m) => m.role));
+      }
       
       const executor = new GenAINodeExecutor(nodeData);
       executionResult = await executor.execute(message, executionContext);

@@ -122,17 +122,89 @@ export class GenAINodeExecutor {
         throw new Error(`Unsupported model: ${model}`);
       }
 
+      // Prepare messages array for AI SDK
+      // The conversationHistory already contains all previous messages in order
+      // We add the current user message at the end
+      // Note: AI SDK requires messages to alternate between user and assistant
+      // Start with conversation history and add current message
+      let messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+      // Add conversation history (filter out empty messages)
+      for (const msg of conversationHistory) {
+        if (msg.content && typeof msg.content === 'string' && msg.content.trim().length > 0) {
+          messages.push({
+            role: msg.role,
+            content: msg.content.trim(),
+          });
+        }
+      }
+
+      // Add current user message
+      if (message && message.trim().length > 0) {
+        messages.push({
+          role: 'user' as const,
+          content: message.trim(),
+        });
+      }
+
+      // Validate and fix message alternation if needed
+      // AI SDK requires messages to alternate: user -> assistant -> user -> assistant
+      // If we have consecutive messages of the same role, we need to fix it
+      const fixedMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      for (let i = 0; i < messages.length; i++) {
+        const current = messages[i];
+        const previous = fixedMessages[fixedMessages.length - 1];
+
+        // If this is the first message, just add it
+        if (!previous) {
+          // Ensure first message is always user (AI SDK requirement)
+          if (current.role === 'user') {
+            fixedMessages.push(current);
+          } else {
+            // If first message is assistant, skip it (shouldn't happen, but handle it)
+            console.warn('[GenAINodeExecutor] First message is assistant, skipping:', current.content.substring(0, 50));
+          }
+        } else {
+          // If roles are different, add the message
+          if (current.role !== previous.role) {
+            fixedMessages.push(current);
+          } else {
+            // If roles are the same, merge content or skip duplicate
+            console.warn('[GenAINodeExecutor] Consecutive messages with same role detected. Merging content.');
+            // Merge content into previous message
+            fixedMessages[fixedMessages.length - 1] = {
+              role: previous.role,
+              content: previous.content + '\n\n' + current.content,
+            };
+          }
+        }
+      }
+
+      // Final validation: ensure we have at least one user message
+      if (fixedMessages.length === 0) {
+        throw {
+          code: 'GENAI_EXECUTION_ERROR',
+          message: 'No valid messages to send to AI. Conversation history is empty or invalid.',
+        } as ExecutionError;
+      }
+
+      // Log message structure for debugging
+      console.log('[GenAINodeExecutor] Message structure:', {
+        originalMessageCount: messages.length,
+        fixedMessageCount: fixedMessages.length,
+        messageRoles: fixedMessages.map((m) => m.role),
+        firstMessageRole: fixedMessages[0]?.role,
+        lastMessageRole: fixedMessages[fixedMessages.length - 1]?.role,
+      });
+
+      // Use fixed messages
+      messages = fixedMessages;
+
       // Call AI API (Perplexity or Gemini)
       const result = await generateText({
         model: modelProvider,
         system: systemPrompt,
-        messages: [
-          ...conversationHistory,
-          {
-            role: 'user' as const,
-            content: message,
-          },
-        ],
+        messages,
         temperature,
       });
 
