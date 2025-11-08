@@ -21,27 +21,33 @@ export class GenAINodeExecutor {
   }
 
   /**
-   * Validates the GenAI node configuration
+   * Validates the GenAI configuration
+   * Returns validation result with errors if any
    */
   validateConfig(): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    if (!this.config.model) {
+    // Check if model is present
+    if (!this.config.model || this.config.model.trim().length === 0) {
       errors.push('Model is required');
+    } else {
+      // Validate model is supported
+      const supportedModels = ['sonar-pro', 'sonar', 'sonar-pro-online', 'sonar-pro-chat', 'gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+      if (!supportedModels.includes(this.config.model)) {
+        errors.push(`Unsupported model: "${this.config.model}". Supported models are: ${supportedModels.join(', ')}`);
+      }
     }
 
-    if (!this.config.apiKey) {
+    // Check if API key is present
+    if (!this.config.apiKey || this.config.apiKey.trim().length === 0) {
       errors.push('API key is required');
-    }
-
-    // Validate supported models
-    const supportedModels = [
-      'sonar-pro', 'sonar', 'sonar-pro-online', 'sonar-pro-chat',
-      'gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'
-    ];
-    
-    if (this.config.model && !supportedModels.includes(this.config.model)) {
-      errors.push(`Model "${this.config.model}" is not supported. Supported models are: ${supportedModels.join(', ')}`);
+    } else {
+      // Validate API key format
+      const isPerplexity = this.config.apiKey.startsWith('pplx-');
+      const isGemini = this.config.apiKey.startsWith('AIza');
+      if (!isPerplexity && !isGemini) {
+        errors.push('API key should start with "pplx-" (Perplexity) or "AIza" (Google Gemini)');
+      }
     }
 
     return {
@@ -129,8 +135,10 @@ export class GenAINodeExecutor {
 
       // For response formatting mode, use minimal conversation history (last few messages for context)
       // For intent detection mode, use full conversation history
+      // History limit is configurable via GenAIConfig.formattingHistoryLimit (default: 4)
+      const formattingHistoryLimit = this.config.formattingHistoryLimit || 4;
       const historyToUse = mode === 'response_formatting' 
-        ? conversationHistory.slice(-4) // Last 2 exchanges for context
+        ? conversationHistory.slice(-formattingHistoryLimit) // Configurable limit (default: 4 messages = last 2 exchanges)
         : conversationHistory;
 
       // Add conversation history (filter out empty messages)

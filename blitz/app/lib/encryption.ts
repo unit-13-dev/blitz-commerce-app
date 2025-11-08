@@ -45,29 +45,63 @@ export function encryptAPIKey(apiKey: string): string {
 export function decryptAPIKey(encryptedData: string): string {
   const encryptionKey = process.env.API_ENCRYPTION_KEY;
   if (!encryptionKey) {
-    throw new Error('API_ENCRYPTION_KEY environment variable is not set');
+    throw new Error('API_ENCRYPTION_KEY environment variable is not set. Please set it in your .env.local file.');
+  }
+
+  // Validate encrypted data is not empty
+  if (!encryptedData || encryptedData.trim().length === 0) {
+    throw new Error('Encrypted data is empty');
   }
 
   // Parse the encrypted data
   const parts = encryptedData.split(':');
   if (parts.length !== 3) {
-    throw new Error('Invalid encrypted data format. Expected salt:iv:encrypted');
+    throw new Error(`Invalid encrypted data format. Expected salt:iv:encrypted, but got ${parts.length} parts. Data length: ${encryptedData.length}`);
   }
 
   const [saltHex, ivHex, encryptedHex] = parts;
 
-  // Convert hex strings to buffers
-  const salt = Buffer.from(saltHex, 'hex');
-  const iv = Buffer.from(ivHex, 'hex');
+  // Validate hex strings are not empty
+  if (!saltHex || !ivHex || !encryptedHex) {
+    throw new Error('Invalid encrypted data format. Salt, IV, or encrypted data is empty.');
+  }
 
-  // Derive key from encryption key and salt
-  const key = deriveKey(encryptionKey, salt);
+  try {
+    // Convert hex strings to buffers
+    const salt = Buffer.from(saltHex, 'hex');
+    const iv = Buffer.from(ivHex, 'hex');
 
-  // Decrypt
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
+    // Validate buffer lengths
+    if (salt.length !== SALT_LENGTH) {
+      throw new Error(`Invalid salt length: expected ${SALT_LENGTH} bytes, got ${salt.length}`);
+    }
+    if (iv.length !== IV_LENGTH) {
+      throw new Error(`Invalid IV length: expected ${IV_LENGTH} bytes, got ${iv.length}`);
+    }
 
-  return decrypted;
+    // Derive key from encryption key and salt
+    const key = deriveKey(encryptionKey, salt);
+
+    // Decrypt
+    const decipher = createDecipheriv(ALGORITHM, key, iv);
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    // Validate decrypted data is not empty
+    if (!decrypted || decrypted.trim().length === 0) {
+      throw new Error('Decrypted API key is empty');
+    }
+
+    return decrypted;
+  } catch (error) {
+    // Provide more detailed error message
+    if (error instanceof Error) {
+      if (error.message.includes('bad decrypt') || error.message.includes('wrong final block length')) {
+        throw new Error(`Failed to decrypt API key: The encryption key (API_ENCRYPTION_KEY) may be incorrect or the data is corrupted. Original error: ${error.message}`);
+      }
+      throw new Error(`Failed to decrypt API key: ${error.message}`);
+    }
+    throw new Error(`Failed to decrypt API key: Unknown error`);
+  }
 }
 

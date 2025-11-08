@@ -17,10 +17,6 @@ export interface NodeConfigurationData {
   genAIConfig?: GenAIConfig;
   routerConfig?: RouterConfig;
   moduleConfig?: ModuleConfig;
-  responseConfig?: {
-    responseType?: 'text' | 'structured' | 'ui-component';
-    config?: Record<string, unknown>;
-  };
 }
 
 /**
@@ -69,39 +65,37 @@ function decryptConfigData(configData: Record<string, unknown>): NodeConfigurati
   if (configData.genAIConfig && typeof configData.genAIConfig === 'object') {
     const genAIConfig = configData.genAIConfig as Record<string, unknown>;
     if (genAIConfig.apiKey && typeof genAIConfig.apiKey === 'string') {
-      try {
-        const encryptedKey = genAIConfig.apiKey as string;
-        
-        // Check if the key looks encrypted (should contain colons from our encryption format: salt:iv:encrypted)
-        // If it doesn't contain colons, it might already be decrypted or in a different format
-        if (encryptedKey.includes(':')) {
-          // Try to decrypt
-          const decryptedKey = decryptAPIKey(encryptedKey);
+      const encryptedApiKey = genAIConfig.apiKey as string;
+      
+      // Check if API key is encrypted (format: salt:iv:encrypted)
+      // If it doesn't have the encrypted format, assume it's already decrypted (for backwards compatibility)
+      if (encryptedApiKey.includes(':') && encryptedApiKey.split(':').length === 3) {
+        try {
+          // Validate API_ENCRYPTION_KEY is set
+          if (!process.env.API_ENCRYPTION_KEY) {
+            console.error('[decryptConfigData] API_ENCRYPTION_KEY environment variable is not set. Cannot decrypt API key.');
+            throw new Error('API_ENCRYPTION_KEY environment variable is not set');
+          }
+          
+          const decryptedApiKey = decryptAPIKey(encryptedApiKey);
           decrypted.genAIConfig = {
             ...genAIConfig,
-            apiKey: decryptedKey,
+            apiKey: decryptedApiKey,
           } as GenAIConfig;
           
-          console.log('[decryptConfigData] Successfully decrypted GenAI API key:', {
-            encryptedLength: encryptedKey.length,
-            decryptedLength: decryptedKey.length,
-            hasModel: !!genAIConfig.model,
-            model: genAIConfig.model,
-          });
-        } else {
-          // Key doesn't look encrypted, use as-is (might be plain text for testing or already decrypted)
-          console.warn('[decryptConfigData] GenAI API key does not appear to be encrypted (no colons found), using as-is');
-          decrypted.genAIConfig = genAIConfig as GenAIConfig;
+          console.log('[decryptConfigData] Successfully decrypted GenAI API key');
+        } catch (error) {
+          console.error('[decryptConfigData] Failed to decrypt GenAI API key:', error);
+          console.error('[decryptConfigData] Encrypted key format:', encryptedApiKey.substring(0, 50) + '...');
+          console.error('[decryptConfigData] API_ENCRYPTION_KEY exists:', !!process.env.API_ENCRYPTION_KEY);
+          // Re-throw error to surface decryption issues
+          throw new Error(`Failed to decrypt GenAI API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-      } catch (error) {
-        console.error('[decryptConfigData] Failed to decrypt GenAI API key:', {
-          error: error instanceof Error ? error.message : String(error),
-          apiKeyLength: (genAIConfig.apiKey as string).length,
-          apiKeyPrefix: (genAIConfig.apiKey as string).substring(0, 20),
-        });
-        // Re-throw the error instead of keeping encrypted key
-        // This ensures we fail fast and don't try to use an encrypted key
-        throw new Error(`Failed to decrypt GenAI API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } else {
+        // API key is not encrypted (plain text) - use as-is
+        // This might happen if the key was stored before encryption was implemented
+        console.warn('[decryptConfigData] GenAI API key does not appear to be encrypted (format: salt:iv:encrypted). Using as-is (assuming plain text).');
+        decrypted.genAIConfig = genAIConfig as GenAIConfig;
       }
     } else {
       decrypted.genAIConfig = genAIConfig as GenAIConfig;
@@ -175,25 +169,36 @@ export async function saveNodeConfiguration(
   }
 
   if (existing) {
-    // Update existing
+    // Update existing configuration
+    console.log(`[saveNodeConfiguration] Updating existing configuration for node ${nodeId} (${nodeType})`);
+    console.log(`[saveNodeConfiguration] Setting is_configured = ${isConfigured}`);
+    
     const { data, error } = await supabase
       .from('node_configurations')
       .update({
         node_type: nodeType,
         config_data: encryptedConfig,
-        is_configured: isConfigured,
+        is_configured: isConfigured, // This is the is_configured column in the database
+        // updated_at is automatically updated by the database trigger
       })
       .eq('id', existing.id)
       .select()
       .single();
 
     if (error || !data) {
+      console.error(`[saveNodeConfiguration] Failed to update node configuration:`, error);
       throw new Error(`Failed to update node configuration: ${error?.message ?? 'unknown error'}`);
     }
 
+    console.log(`[saveNodeConfiguration] ✓ Configuration updated successfully`);
+    console.log(`[saveNodeConfiguration] Saved is_configured value: ${data.is_configured}`);
+    
     return data as NodeConfigurationRecord;
   } else {
-    // Insert new
+    // Insert new configuration
+    console.log(`[saveNodeConfiguration] Creating new configuration for node ${nodeId} (${nodeType})`);
+    console.log(`[saveNodeConfiguration] Setting is_configured = ${isConfigured}`);
+    
     const { data, error } = await supabase
       .from('node_configurations')
       .insert({
@@ -201,15 +206,19 @@ export async function saveNodeConfiguration(
         node_id: nodeId,
         node_type: nodeType,
         config_data: encryptedConfig,
-        is_configured: isConfigured,
+        is_configured: isConfigured, // This is the is_configured column in the database
       })
       .select()
       .single();
 
     if (error || !data) {
+      console.error(`[saveNodeConfiguration] Failed to create node configuration:`, error);
       throw new Error(`Failed to create node configuration: ${error?.message ?? 'unknown error'}`);
     }
 
+    console.log(`[saveNodeConfiguration] ✓ Configuration created successfully`);
+    console.log(`[saveNodeConfiguration] Saved is_configured value: ${data.is_configured}`);
+    
     return data as NodeConfigurationRecord;
   }
 }
@@ -234,11 +243,63 @@ export async function loadNodeConfigurations(
   const configurations: Record<string, NodeConfigurationData & { isConfigured: boolean }> = {};
 
   for (const record of data || []) {
-    const decrypted = decryptConfigData(record.config_data);
-    configurations[record.node_id] = {
-      ...decrypted,
-      isConfigured: record.is_configured,
-    };
+    try {
+      // Decrypt configuration data (this will decrypt API keys)
+      const decrypted = decryptConfigData(record.config_data);
+      
+      configurations[record.node_id] = {
+        ...decrypted,
+        isConfigured: record.is_configured, // Use is_configured flag from database
+      };
+      
+      // Log for debugging
+      if (record.node_type === 'genai-intent') {
+        console.log(`[loadNodeConfigurations] Loaded GenAI node config for node ${record.node_id}:`, {
+          isConfigured: record.is_configured,
+          hasApiKey: !!decrypted.genAIConfig?.apiKey,
+          hasModel: !!decrypted.genAIConfig?.model,
+          model: decrypted.genAIConfig?.model,
+          apiKeyLength: decrypted.genAIConfig?.apiKey?.length || 0,
+        });
+      }
+    } catch (error) {
+      console.error(`[loadNodeConfigurations] Failed to decrypt config for node ${record.node_id}:`, error);
+      console.error(`[loadNodeConfigurations] Error details:`, {
+        nodeId: record.node_id,
+        nodeType: record.node_type,
+        isConfiguredInDB: record.is_configured,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        apiEncryptionKeyExists: !!process.env.API_ENCRYPTION_KEY,
+        configDataKeys: Object.keys(record.config_data || {}),
+      });
+      
+      // IMPORTANT: Preserve the database is_configured flag even if decryption fails
+      // The database flag is the source of truth - decryption failure is a separate issue
+      // Decryption errors will surface when trying to use the node (e.g., in chat API)
+      if (record.node_type === 'genai-intent') {
+        // For GenAI nodes, preserve database flag but don't include config (can't decrypt)
+        configurations[record.node_id] = {
+          isConfigured: record.is_configured, // PRESERVE database flag (source of truth)
+          // Don't include genAIConfig since we can't decrypt it
+          // The caller will need to handle the missing config appropriately
+        };
+      } else {
+        // For non-GenAI nodes, try to return config without decryption
+        // (they might not have encrypted API keys)
+        try {
+          const configData = record.config_data as NodeConfigurationData;
+          configurations[record.node_id] = {
+            ...configData,
+            isConfigured: record.is_configured, // PRESERVE database flag
+          };
+        } catch {
+          // If that also fails, still preserve database flag
+          configurations[record.node_id] = {
+            isConfigured: record.is_configured, // PRESERVE database flag
+          };
+        }
+      }
+    }
   }
 
   return configurations;

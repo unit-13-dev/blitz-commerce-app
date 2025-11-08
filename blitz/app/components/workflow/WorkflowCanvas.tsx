@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { GenAIIntentNode, RouterNode, ModuleNode, ResponseNode } from './nodes';
+import { GenAIIntentNode, RouterNode, ModuleNode } from './nodes';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { WorkflowNode, WorkflowEdge, ModuleType, NodeType, NodeData } from '@/app/lib/types/workflow';
 import { NodeAddModal, AddableNode } from './NodeAddModal';
@@ -26,7 +26,6 @@ const nodeTypes = {
   'genai-intent': GenAIIntentNode as React.ComponentType<any>,
   router: RouterNode as React.ComponentType<any>,
   module: ModuleNode as React.ComponentType<any>,
-  response: ResponseNode as React.ComponentType<any>,
 };
 
 const MODULE_DEFINITIONS: Array<{
@@ -67,11 +66,6 @@ const CORE_NODES: Array<{ id: string; type: NodeType; position: { x: number; y: 
     type: 'router',
     position: { x: 600, y: 200 },
   },
-  {
-    id: 'response-node',
-    type: 'response',
-    position: { x: 1000, y: 200 },
-  },
 ];
 
 interface WorkflowCanvasProps {
@@ -82,7 +76,6 @@ interface WorkflowCanvasProps {
     genAIConfig?: any;
     routerConfig?: any;
     moduleConfig?: any;
-    responseConfig?: any;
     isConfigured?: boolean;
   }>;
 }
@@ -105,7 +98,6 @@ export function WorkflowCanvas({
     genAIConfig?: any;
     routerConfig?: any;
     moduleConfig?: any;
-    responseConfig?: any;
     isConfigured?: boolean;
   }>>(initialNodeConfigs);
 
@@ -252,7 +244,6 @@ export function WorkflowCanvas({
             position: core.position,
             data: {
               // Only basic data, no configs
-              ...(core.type === 'response' ? { responseType: 'text' } : {}),
             },
             deletable: core.type === 'genai-intent' || core.type === 'router' ? false : true,
           });
@@ -331,7 +322,7 @@ export function WorkflowCanvas({
     [setEdges, setNodes, workflowId]
   );
 
-  const protectedCoreIds = useMemo(() => new Set(CORE_NODES.filter((node) => node.type !== 'response').map((node) => node.id)), []);
+  const protectedCoreIds = useMemo(() => new Set(CORE_NODES.map((node) => node.id)), []);
 
   const onNodesDelete = useCallback(
     (nodesToDelete: Node[]) => {
@@ -377,8 +368,6 @@ export function WorkflowCanvas({
         'router->module',
         'module->router',
         'module->module',
-        'module->response',
-        'response->module',
       ]);
       return allowedPairs.has(pair);
     },

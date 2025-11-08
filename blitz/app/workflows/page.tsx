@@ -44,7 +44,6 @@ export default async function WorkflowsPage() {
               genAIConfig: node.genAIConfig,
               routerConfig: node.routerConfig,
               moduleConfig: node.moduleConfig,
-              responseConfig: node.responseConfig,
               isConfigured: node.isConfigured,
             };
             return acc;

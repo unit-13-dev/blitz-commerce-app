@@ -36,9 +36,9 @@ export function ModuleNode(props: NodeProps) {
   const moduleType = (nodeData.moduleType || 'tracking') as ModuleType;
   const styles = moduleStyles[moduleType];
   const label = nodeData.label || moduleLabels[moduleType];
-  const moduleConfig = nodeData.moduleConfig;
-  const apiConfigs = moduleConfig?.apiConfigs || {};
-  const apiCount = Object.keys(apiConfigs).length;
+  // Note: moduleConfig is stored separately in the database, not in nodeData
+  // The API count will be shown from the configured status
+  const isConfigured = nodeData.isConfigured || false;
 
   return (
     <div
@@ -60,13 +60,17 @@ export function ModuleNode(props: NodeProps) {
       />
 
       <div className="space-y-1 text-xs text-slate-700">
-        <div className="rounded bg-white/60 px-2 py-1">APIs Configured: {apiCount}</div>
         <div className="rounded bg-white/60 px-2 py-1 font-mono text-[10px] uppercase text-slate-500">
           ID: {id}
         </div>
-        {!nodeData.isConfigured && (
+        {!isConfigured && (
           <div className="rounded bg-amber-200/70 px-2 py-1 text-amber-800">
             Configure module details
+          </div>
+        )}
+        {isConfigured && (
+          <div className="rounded bg-green-200/70 px-2 py-1 text-green-800">
+            ✓ Configured
           </div>
         )}
       </div>

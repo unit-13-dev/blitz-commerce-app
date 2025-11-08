@@ -6,13 +6,11 @@ import {
   ExecutionError,
   GenAIExecutionResult,
   RouterExecutionResult,
-  ModuleExecutionResult,
-  ResponseExecutionResult
+  ModuleExecutionResult
 } from '../types/execution';
 import { GenAINodeExecutor } from '../executors/GenAINodeExecutor';
 import { RouterNodeExecutor } from '../executors/RouterNodeExecutor';
 import { ModuleNodeExecutor } from '../executors/ModuleNodeExecutor';
-import { ResponseNodeExecutor } from '../executors/ResponseNodeExecutor';
 
 /**
  * Workflow Execution Engine
@@ -64,23 +62,10 @@ export class WorkflowExecutionEngine {
       // Step 1: Find and execute GenAI node
       const genAINode = this.findNodeByType('genai-intent');
       if (!genAINode) {
-        console.error('[WorkflowExecutionEngine] GenAI node not found in workflow nodes:', {
-          nodeCount: this.nodes.length,
-          nodeTypes: this.nodes.map(n => n.type),
-          nodeIds: this.nodes.map(n => n.id),
-        });
         throw this.createError('GENAI_NODE_NOT_FOUND', 'GenAI Intent node not found in workflow');
       }
 
-      console.log('[WorkflowExecutionEngine] Found GenAI node:', {
-        nodeId: genAINode.id,
-        hasGenAIConfig: !!genAINode.genAIConfig,
-        hasApiKey: !!genAINode.genAIConfig?.apiKey,
-        hasModel: !!genAINode.genAIConfig?.model,
-        model: genAINode.genAIConfig?.model,
-        apiKeyLength: genAINode.genAIConfig?.apiKey?.length || 0,
-      });
-      
+      console.log('[WorkflowExecutionEngine] Found GenAI node:', genAINode.id);
       const genAIResult = await this.executeGenAINode(genAINode);
       this.executionData.genAIResult = genAIResult;
       this.executionPath.push(genAINode.id);
@@ -166,22 +151,22 @@ export class WorkflowExecutionEngine {
         );
       }
 
-      // Step 4: Format module response using GenAI
-      // If module returns MODULE_TO_FRONTEND, it means module returns UI component directly (no GenAI formatting)
-      // If module returns GENAI_TO_FRONTEND, format the JSON response using GenAI
+      // Step 4: Format module response based on method
+      // MODULE_TO_FRONTEND: Module returns UI component (user input needed) - return directly
+      // GENAI_TO_FRONTEND: Module has resolved - format JSON response using GenAI
       let finalResponse: string | Record<string, unknown>;
       let responseType: 'text' | 'structured' | 'ui-component';
       let finalMethod: 'GENAI_TO_FRONTEND' | 'FRONTEND_TO_BLITZ' | 'MODULE_TO_FRONTEND';
 
       if (moduleResult.method === 'MODULE_TO_FRONTEND') {
-        // Module returns UI component directly - no GenAI formatting needed
-        console.log('[WorkflowExecutionEngine] Module returns UI component directly, skipping GenAI formatting');
+        // Module returns UI component directly - user input is needed (e.g., order selection dropdown)
+        console.log('[WorkflowExecutionEngine] Module returns UI component (user input needed), returning directly to frontend');
         finalResponse = moduleResult.data || {};
         responseType = 'ui-component';
         finalMethod = 'MODULE_TO_FRONTEND';
       } else {
-        // Module returns GENAI_TO_FRONTEND - format JSON response using GenAI
-        console.log('[WorkflowExecutionEngine] Formatting module response using GenAI');
+        // Module returns GENAI_TO_FRONTEND - module has resolved, format JSON response using GenAI
+        console.log('[WorkflowExecutionEngine] Module has resolved, formatting response using GenAI');
         const formattedGenAIResult = await this.formatModuleResponseWithGenAI(genAINode, moduleResult);
         
         // Update execution data with formatted result
@@ -247,40 +232,8 @@ export class WorkflowExecutionEngine {
 
     try {
       if (!node.genAIConfig) {
-        console.error('[WorkflowExecutionEngine] GenAI config missing from node:', {
-          nodeId: node.id,
-          nodeType: node.type,
-          hasGenAIConfig: false,
-        });
         throw this.createError('GENAI_CONFIG_MISSING', 'GenAI configuration is missing', { nodeId: node.id });
       }
-
-      // Validate API key and model before creating executor
-      if (!node.genAIConfig.apiKey || node.genAIConfig.apiKey.trim().length === 0) {
-        console.error('[WorkflowExecutionEngine] GenAI API key is missing or empty:', {
-          nodeId: node.id,
-          hasApiKey: !!node.genAIConfig.apiKey,
-          apiKeyType: typeof node.genAIConfig.apiKey,
-        });
-        throw this.createError('GENAI_API_KEY_MISSING', 'GenAI API key is missing or empty', { nodeId: node.id });
-      }
-
-      if (!node.genAIConfig.model || node.genAIConfig.model.trim().length === 0) {
-        console.error('[WorkflowExecutionEngine] GenAI model is missing or empty:', {
-          nodeId: node.id,
-          hasModel: !!node.genAIConfig.model,
-          modelType: typeof node.genAIConfig.model,
-        });
-        throw this.createError('GENAI_MODEL_MISSING', 'GenAI model is missing or empty', { nodeId: node.id });
-      }
-
-      console.log('[WorkflowExecutionEngine] Creating GenAI executor:', {
-        nodeId: node.id,
-        model: node.genAIConfig.model,
-        apiKeyLength: node.genAIConfig.apiKey.length,
-        originalMessageLength: this.context.originalMessage.length,
-        conversationHistoryLength: this.context.conversationHistory.length,
-      });
 
       const executor = new GenAINodeExecutor({ genAIConfig: node.genAIConfig });
       const result = await executor.execute(this.context.originalMessage, this.context);

@@ -109,7 +109,7 @@ export async function ensureWorkflowForBusiness(businessId: string): Promise<Wor
     return existingWorkflows[0];
   }
 
-  // Create workflow with default core nodes (GenAI, Router, Response)
+  // Create workflow with default core nodes (GenAI, Router)
   // These nodes are always present and track their positions in react_flow_state
   const defaultNodes: WorkflowNode[] = [
     {
@@ -127,14 +127,6 @@ export async function ensureWorkflowForBusiness(businessId: string): Promise<Wor
       position: { x: 600, y: 200 },
       data: {
         // Basic data only, no configs
-      },
-    },
-    {
-      id: 'response-node',
-      type: 'response',
-      position: { x: 1000, y: 200 },
-      data: {
-        responseType: 'text',
       },
     },
   ];
@@ -205,7 +197,6 @@ export async function loadWorkflowWithConfigurations(
       genAIConfig: config.genAIConfig,
       routerConfig: config.routerConfig,
       moduleConfig: config.moduleConfig,
-      responseConfig: config.responseConfig,
       isConfigured: config.isConfigured,
     };
   });

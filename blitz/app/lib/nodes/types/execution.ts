@@ -32,9 +32,6 @@ export interface NodeExecutionData {
   // Module node output (if executed)
   moduleResult?: ModuleExecutionResult;
   
-  // Response node output (if executed)
-  responseResult?: ResponseExecutionResult;
-  
   // Accumulated data from all nodes
   accumulatedData: Record<string, unknown>;
   
@@ -85,16 +82,6 @@ export interface ModuleExecutionResult {
 }
 
 /**
- * Response Node Execution Result
- */
-export interface ResponseExecutionResult {
-  formattedResponse: string | Record<string, unknown>;
-  responseType: 'text' | 'structured' | 'ui-component';
-  nodeId: string;
-  executionTime: number;
-}
-
-/**
  * Complete workflow execution result
  */
 export interface WorkflowExecutionResult {
@@ -108,7 +95,6 @@ export interface WorkflowExecutionResult {
     genAI?: GenAIExecutionResult;
     router?: RouterExecutionResult;
     module?: ModuleExecutionResult;
-    response?: ResponseExecutionResult;
   };
   totalExecutionTime: number;
   executionPath: string[]; // Array of node IDs executed in order

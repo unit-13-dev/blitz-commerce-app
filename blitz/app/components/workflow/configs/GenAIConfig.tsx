@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { GenAIConfig } from '@/app/lib/types/workflow';
+import type { GenAIConfig } from '@/app/lib/types/workflow';
 
 interface GenAIConfigProps {
   nodeConfig?: {

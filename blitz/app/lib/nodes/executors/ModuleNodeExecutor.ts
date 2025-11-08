@@ -115,14 +115,39 @@ export class ModuleNodeExecutor {
       context
     );
 
-    // Process and return result
+    const orders = Array.isArray(apiResult.data) ? apiResult.data : (apiResult.data as any)?.orders || [];
+    
+    // If we have orders and no specific orderId, return MODULE_TO_FRONTEND to show UI (dropdown)
+    // If orderId is present, return GENAI_TO_FRONTEND to format the specific order info
+    if (!extractedData.orderId && orders.length > 0) {
+      // User input needed: show order selection UI
+      return {
+        success: true,
+        data: {
+          orders: orders,
+          requiresUserInput: true,
+          uiComponent: {
+            type: 'select',
+            label: 'Select an order to track:',
+            options: orders.map((order: any, index: number) => ({
+              value: order.id || order.orderId || index.toString(),
+              label: `Order #${order.id || order.orderId || index + 1} - ${order.status || 'Unknown status'}`,
+            })),
+          },
+        },
+        method: 'MODULE_TO_FRONTEND', // Return UI component for user selection
+      };
+    }
+
+    // OrderId is present or no orders found - return data for GenAI formatting
     return {
       success: true,
       data: {
-        orders: apiResult.data || [],
+        orders: orders,
+        orderId: extractedData.orderId,
         message: 'Order tracking information retrieved',
       },
-      method: 'MODULE_TO_FRONTEND',
+      method: 'GENAI_TO_FRONTEND', // Format with GenAI
     };
   }
 
@@ -137,7 +162,46 @@ export class ModuleNodeExecutor {
   ): Promise<ModuleExecutionResult> {
     console.log('[ModuleNodeExecutor] Executing cancellation module');
 
-    // Get API config for cancellation endpoint
+    // Check if orderId is missing - if so, fetch orders for user to select
+    if (!extractedData.orderId) {
+      // Get API config for orders endpoint to show order selection
+      const ordersApiConfig = moduleConfig.apiConfigs['orders'] || moduleConfig.apiConfigs['cancel'];
+      if (!ordersApiConfig) {
+        throw this.createError('API_CONFIG_MISSING', 'Orders or cancellation API configuration is missing');
+      }
+
+      // Fetch user's orders
+      const apiResult = await this.callBusinessAPI(
+        ordersApiConfig,
+        {
+          userId: context.userId,
+          ...extractedData,
+        },
+        context
+      );
+
+      const orders = Array.isArray(apiResult.data) ? apiResult.data : (apiResult.data as any)?.orders || [];
+
+      // User input needed: show order selection UI
+      return {
+        success: true,
+        data: {
+          orders: orders,
+          requiresUserInput: true,
+          uiComponent: {
+            type: 'select',
+            label: 'Select an order to cancel:',
+            options: orders.map((order: any, index: number) => ({
+              value: order.id || order.orderId || index.toString(),
+              label: `Order #${order.id || order.orderId || index + 1} - ${order.status || 'Unknown status'}`,
+            })),
+          },
+        },
+        method: 'MODULE_TO_FRONTEND', // Return UI component for user selection
+      };
+    }
+
+    // OrderId is present - proceed with cancellation
     const cancelApiConfig = moduleConfig.apiConfigs['cancel'];
     if (!cancelApiConfig) {
       throw this.createError('API_CONFIG_MISSING', 'Cancellation API configuration is missing');
@@ -155,16 +219,15 @@ export class ModuleNodeExecutor {
       context
     );
 
-    // Process and return result
+    // Process and return result - cancellation is complete, format with GenAI
     return {
       success: true,
       data: {
         cancelled: true,
         orderId: extractedData.orderId,
-        message: 'Order cancellation processed',
-        ...apiResult.data,
+        cancellationResult: apiResult.data,
       },
-      method: 'MODULE_TO_FRONTEND',
+      method: 'GENAI_TO_FRONTEND', // Format cancellation result with GenAI
     };
   }
 
@@ -179,7 +242,46 @@ export class ModuleNodeExecutor {
   ): Promise<ModuleExecutionResult> {
     console.log('[ModuleNodeExecutor] Executing refund module');
 
-    // Get API config for refund endpoint
+    // Check if orderId is missing - if so, fetch orders for user to select
+    if (!extractedData.orderId) {
+      // Get API config for orders endpoint to show order selection
+      const ordersApiConfig = moduleConfig.apiConfigs['orders'] || moduleConfig.apiConfigs['refund'];
+      if (!ordersApiConfig) {
+        throw this.createError('API_CONFIG_MISSING', 'Orders or refund API configuration is missing');
+      }
+
+      // Fetch user's orders
+      const apiResult = await this.callBusinessAPI(
+        ordersApiConfig,
+        {
+          userId: context.userId,
+          ...extractedData,
+        },
+        context
+      );
+
+      const orders = Array.isArray(apiResult.data) ? apiResult.data : (apiResult.data as any)?.orders || [];
+
+      // User input needed: show order selection UI
+      return {
+        success: true,
+        data: {
+          orders: orders,
+          requiresUserInput: true,
+          uiComponent: {
+            type: 'select',
+            label: 'Select an order to refund:',
+            options: orders.map((order: any, index: number) => ({
+              value: order.id || order.orderId || index.toString(),
+              label: `Order #${order.id || order.orderId || index + 1} - ${order.status || 'Unknown status'}`,
+            })),
+          },
+        },
+        method: 'MODULE_TO_FRONTEND', // Return UI component for user selection
+      };
+    }
+
+    // OrderId is present - proceed with refund
     const refundApiConfig = moduleConfig.apiConfigs['refund'];
     if (!refundApiConfig) {
       throw this.createError('API_CONFIG_MISSING', 'Refund API configuration is missing');
@@ -197,16 +299,15 @@ export class ModuleNodeExecutor {
       context
     );
 
-    // Process and return result
+    // Process and return result - refund is complete, format with GenAI
     return {
       success: true,
       data: {
         refunded: true,
         orderId: extractedData.orderId,
-        message: 'Refund request processed',
-        ...apiResult.data,
+        refundResult: apiResult.data,
       },
-      method: 'MODULE_TO_FRONTEND',
+      method: 'GENAI_TO_FRONTEND', // Format refund result with GenAI
     };
   }
 

@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/app/lib/supabase/admin';
-import { listWorkflowsForBusiness } from '@/app/lib/db/workflows';
+import { listWorkflowsForBusiness, loadWorkflowWithConfigurations } from '@/app/lib/db/workflows';
 
 export async function GET() {
   try {
@@ -39,152 +39,64 @@ export async function GET() {
             hasWorkflow = true;
             workflowId = workflow.id;
             
-            // Query node_configurations table directly to check for configured GenAI node
-            // IMPORTANT: We check BOTH the database column is_configured AND the config_data structure
-            // This handles cases where data might be stored incorrectly
+            // Check if GenAI node is configured by directly querying the database
+            // This is more reliable than loading and decrypting (which might fail)
             try {
-              const { data: allGenAINodes, error: queryError } = await supabase
-                .from('node_configurations')
-                .select('is_configured, config_data, node_id')
-                .eq('workflow_id', workflow.id)
-                .eq('node_type', 'genai-intent');
-
-              if (queryError) {
-                console.error('[Businesses API] Error querying node_configurations:', {
-                  workflowId: workflow.id,
-                  error: queryError,
-                });
+              // First, check if GenAI node exists in workflow
+              const { nodes: workflowNodes } = await loadWorkflowWithConfigurations(workflow.id);
+              const genAINode = workflowNodes.find((node) => node.type === 'genai-intent');
+              
+              if (!genAINode) {
                 hasGenAINode = false;
-              } else if (allGenAINodes && allGenAINodes.length > 0) {
-                // Log all found nodes for debugging
-                console.log('[Businesses API] Found GenAI nodes:', {
-                  workflowId: workflow.id,
-                  nodeCount: allGenAINodes.length,
-                  nodes: allGenAINodes.map(n => ({
-                    nodeId: n.node_id,
-                    isConfigured: n.is_configured,
-                    configDataType: typeof n.config_data,
-                    configDataIsObject: typeof n.config_data === 'object',
-                  })),
-                });
-                
-                // Check each GenAI node to see if any are properly configured
-                for (const node of allGenAINodes) {
-                  try {
-                    const configData = node.config_data;
-                    
-                    // Handle different data types
-                    let parsedConfigData: Record<string, unknown>;
-                    if (typeof configData === 'string') {
-                      try {
-                        parsedConfigData = JSON.parse(configData);
-                      } catch {
-                        console.error('[Businesses API] Failed to parse config_data as JSON:', node.node_id);
-                        continue;
-                      }
-                    } else if (typeof configData === 'object' && configData !== null) {
-                      parsedConfigData = configData as Record<string, unknown>;
-                    } else {
-                      console.error('[Businesses API] Invalid config_data type:', {
-                        nodeId: node.node_id,
-                        type: typeof configData,
-                      });
-                      continue;
-                    }
-                    
-                    // Check if config_data has genAIConfig
-                    if (parsedConfigData.genAIConfig && typeof parsedConfigData.genAIConfig === 'object') {
-                      const genAIConfigObj = parsedConfigData.genAIConfig as Record<string, unknown>;
-                      
-                      // Check if apiKey and model exist
-                      const hasApiKey = genAIConfigObj.apiKey && 
-                                        typeof genAIConfigObj.apiKey === 'string' &&
-                                        genAIConfigObj.apiKey.trim().length > 0;
-                      const hasModel = genAIConfigObj.model &&
-                                       typeof genAIConfigObj.model === 'string' &&
-                                       genAIConfigObj.model.trim().length > 0;
-                      
-                      // Check if configured - either database column OR config_data flag (for backwards compatibility)
-                      // OR if it has API key and model (consider it configured even if flag is false)
-                      const isConfiguredInDB = node.is_configured === true;
-                      const isConfiguredInData = parsedConfigData.isConfigured === true || 
-                                                 parsedConfigData.is_configured === true;
-                      
-                      // If node has API key and model, consider it configured
-                      // (The API key test might have failed during save, but the key is still there)
-                      const hasRequiredData = hasApiKey && hasModel;
-                      const isActuallyConfigured = isConfiguredInDB || isConfiguredInData || hasRequiredData;
-                      
-                      console.log('[Businesses API] Checking GenAI node:', {
-                        workflowId: workflow.id,
-                        nodeId: node.node_id,
-                        hasApiKey,
-                        hasModel,
-                        hasRequiredData,
-                        isConfiguredInDB,
-                        isConfiguredInData,
-                        isActuallyConfigured,
-                        model: genAIConfigObj.model,
-                        apiKeyLength: hasApiKey ? (genAIConfigObj.apiKey as string).length : 0,
-                      });
-                      
-                      // Node is configured if it has API key and model
-                      // We consider it configured even if the API key test failed during save
-                      // The actual API key validity will be tested when the chat API is called
-                      if (hasApiKey && hasModel) {
-                        hasGenAINode = true;
-                        console.log('[Businesses API] ✓ GenAI node is properly configured:', {
-                          workflowId: workflow.id,
-                          nodeId: node.node_id,
-                          model: genAIConfigObj.model,
-                          isConfiguredFlag: isConfiguredInDB || isConfiguredInData,
-                          note: 'Node has API key and model - considered configured for frontend display',
-                        });
-                        break; // Found a configured node, no need to check others
-                      }
-                    } else {
-                      console.log('[Businesses API] GenAI node missing genAIConfig:', {
-                        workflowId: workflow.id,
-                        nodeId: node.node_id,
-                        configDataKeys: Object.keys(parsedConfigData),
-                        hasGenAIConfig: !!parsedConfigData.genAIConfig,
-                      });
-                    }
-                  } catch (nodeError) {
-                    console.error('[Businesses API] Error processing node:', {
-                      workflowId: workflow.id,
-                      nodeId: node.node_id,
-                      error: nodeError instanceof Error ? nodeError.message : String(nodeError),
-                    });
-                  }
-                }
-                
-                if (!hasGenAINode) {
-                  console.log('[Businesses API] GenAI nodes found but none are properly configured:', {
-                    workflowId: workflow.id,
-                    nodeCount: allGenAINodes.length,
-                    nodes: allGenAINodes.map(n => ({
-                      nodeId: n.node_id,
-                      isConfigured: n.is_configured,
-                      hasConfigData: !!n.config_data,
-                      configDataKeys: n.config_data && typeof n.config_data === 'object' 
-                        ? Object.keys(n.config_data as Record<string, unknown>)
-                        : [],
-                    })),
-                  });
-                }
+                console.log(`[Businesses API] Business ${business.id} - No GenAI node found in workflow`);
               } else {
-                // No GenAI node configuration found in database
-                console.log('[Businesses API] No GenAI node found in node_configurations:', {
-                  workflowId: workflow.id,
+                // Directly query the database to check is_configured flag
+                // This is the source of truth - if the database says it's configured, we trust it
+                const { workflowHasConfiguredGenAI } = await import('@/app/lib/db/node-configurations');
+                const isConfiguredInDB = await workflowHasConfiguredGenAI(workflow.id);
+                
+                // The database is_configured flag is the source of truth
+                // If it's true, the node is considered configured
+                // (Decryption errors will surface when trying to use the node, not here)
+                hasGenAINode = isConfiguredInDB;
+                
+                // Also try to verify we can decrypt (for logging/debugging purposes only)
+                // This doesn't affect hasGenAINode, but helps debug issues
+                let canDecrypt = false;
+                let decryptError: Error | null = null;
+                try {
+                  const { nodes } = await loadWorkflowWithConfigurations(workflow.id);
+                  const loadedGenAINode = nodes.find((node) => node.type === 'genai-intent' && node.id === genAINode.id);
+                  
+                  if (loadedGenAINode && 
+                      loadedGenAINode.genAIConfig?.apiKey && 
+                      loadedGenAINode.genAIConfig?.model &&
+                      loadedGenAINode.genAIConfig.apiKey.trim().length > 0 &&
+                      loadedGenAINode.genAIConfig.model.trim().length > 0) {
+                    canDecrypt = true;
+                  }
+                } catch (error) {
+                  decryptError = error instanceof Error ? error : new Error(String(error));
+                  console.warn(`[Businesses API] Warning: Database says GenAI is configured for business ${business.id}, but decryption failed. This will cause issues when using the chat API.`, decryptError.message);
+                }
+                
+                // Log for debugging
+                console.log(`[Businesses API] Business ${business.id} - GenAI node check:`, {
+                  nodeId: genAINode.id,
+                  isConfiguredInDB,
+                  canDecrypt,
+                  hasGenAINode,
+                  decryptError: decryptError?.message || null,
+                  note: hasGenAINode 
+                    ? (canDecrypt 
+                        ? 'GenAI node is configured and decryptable' 
+                        : 'GenAI node is configured in DB but decryption failed - check API_ENCRYPTION_KEY')
+                    : 'Database says not configured',
                 });
-                hasGenAINode = false;
               }
             } catch (error) {
-              console.error('[Businesses API] Exception querying node_configurations:', {
-                workflowId: workflow.id,
-                error: error instanceof Error ? error.message : String(error),
-              });
+              // If loading configurations fails, log error but don't fail completely
+              console.error(`[Businesses API] Failed to check GenAI configuration for business ${business.id}:`, error);
               hasGenAINode = false;
             }
           }

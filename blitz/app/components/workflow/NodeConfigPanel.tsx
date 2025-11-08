@@ -12,10 +12,6 @@ interface NodeConfigPanelProps {
     genAIConfig?: GenAIConfig;
     routerConfig?: RouterConfig;
     moduleConfig?: ModuleConfig;
-    responseConfig?: {
-      responseType?: 'text' | 'structured' | 'ui-component';
-      config?: Record<string, unknown>;
-    };
     isConfigured?: boolean;
   };
   workflowId?: string;
@@ -23,10 +19,6 @@ interface NodeConfigPanelProps {
     genAIConfig?: GenAIConfig;
     routerConfig?: RouterConfig;
     moduleConfig?: ModuleConfig;
-    responseConfig?: {
-      responseType?: 'text' | 'structured' | 'ui-component';
-      config?: Record<string, unknown>;
-    };
   }, isConfigured: boolean) => Promise<void>;
   onDelete?: (nodeId: string) => void;
   onClose: () => void;
@@ -78,16 +70,6 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
     }
   );
   
-  // Response config state
-  const [responseConfig, setResponseConfig] = useState<{
-    responseType?: 'text' | 'structured' | 'ui-component';
-    config?: Record<string, unknown>;
-  }>(() =>
-    nodeConfig?.responseConfig || {
-      responseType: 'text',
-    }
-  );
-  
   const [newApiName, setNewApiName] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -119,9 +101,6 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
       }
       if (nodeConfig.moduleConfig) {
         setModuleConfig(nodeConfig.moduleConfig);
-      }
-      if (nodeConfig.responseConfig) {
-        setResponseConfig(nodeConfig.responseConfig);
       }
     } else {
       // Reset to defaults if no config exists
@@ -175,9 +154,6 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
       } else if (node.type === 'module') {
         configToSave = { moduleConfig };
         isConfigured = Object.keys(moduleConfig.apiConfigs || {}).length > 0;
-      } else if (node.type === 'response') {
-        configToSave = { responseConfig };
-        isConfigured = true;
       }
 
       await onUpdate(node.id, configToSave, isConfigured);
@@ -944,56 +920,6 @@ export function NodeConfigPanel({ node, allNodes = [], nodeConfig, workflowId, o
               </button>
             )}
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (node.type === 'response') {
-    return (
-      <div 
-        className={panelClass}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-6 flex items-center justify-between border-b border-gray-200 pb-4">
-          <h2 className={headingClass}>Response Configuration</h2>
-          <button 
-            onClick={onClose} 
-            className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" 
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="space-y-5 text-sm">
-          <div>
-            <label className={labelClass}>Response Type</label>
-            <select
-              value={responseConfig.responseType || 'text'}
-              onChange={(e) =>
-                setResponseConfig({
-                  ...responseConfig,
-                  responseType: e.target.value as 'text' | 'structured' | 'ui-component',
-                })
-              }
-              className={inputClass}
-            >
-              <option value="text">Text</option>
-              <option value="structured">Structured Data</option>
-              <option value="ui-component">UI Component</option>
-            </select>
-          </div>
-
-          <button 
-            onClick={handleSave} 
-            disabled={isSaving}
-            className={`${buttonPrimaryClass} ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isSaving ? 'Saving...' : 'Save configuration'}
-          </button>
         </div>
       </div>
     );

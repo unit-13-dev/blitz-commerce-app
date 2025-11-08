@@ -40,18 +40,22 @@ export async function POST(request: Request) {
 
     // Validate node type
     const nodeType = payload.nodeType as NodeType;
-    if (!['genai-intent', 'router', 'module', 'response'].includes(nodeType)) {
+    if (!['genai-intent', 'router', 'module'].includes(nodeType)) {
       return NextResponse.json(
         { error: 'Invalid node type.' },
         { status: 400 }
       );
     }
 
-    // Validate GenAI config if it's a GenAI node
+    // Determine isConfigured based on node type
+    // For GenAI nodes, isConfigured is ALWAYS determined by API key validation test
+    // For other nodes, use the payload value
     let isConfigured = payload.isConfigured ?? false;
     
     if (nodeType === 'genai-intent') {
       const config = payload.config as NodeConfigurationData;
+      
+      // Validate required fields
       if (!config.genAIConfig?.apiKey) {
         return NextResponse.json(
           { error: 'API key is required for GenAI node.' },
@@ -72,53 +76,70 @@ export async function POST(request: Request) {
         );
       }
 
-      // Test the API key if user is trying to save/configure
-      // Always test the API key when saving to ensure it's valid
-      if (config.genAIConfig) {
-        console.log('[Save Node Config] Testing API key before saving...');
-        const apiKeyTest = await testAPIKey(config.genAIConfig);
+      // IMPORTANT: For GenAI nodes, isConfigured is ALWAYS determined by API key validation
+      // We ignore the frontend's isConfigured value and test the API key instead
+      console.log('[Save Node Config] GenAI node detected - testing API key to determine isConfigured status...');
+      console.log('[Save Node Config] Model:', config.genAIConfig.model);
+      console.log('[Save Node Config] API key prefix:', config.genAIConfig.apiKey.substring(0, 10) + '...');
+      
+      // Test the API key to determine if node is configured
+      // This is the ONLY way to determine isConfigured for GenAI nodes
+      const apiKeyTest = await testAPIKey(config.genAIConfig);
+      
+      if (!apiKeyTest.valid) {
+        // API key test failed - node is NOT configured
+        console.log('[Save Node Config] API key test FAILED - marking is_configured = false');
+        console.log('[Save Node Config] Error:', apiKeyTest.error);
         
-        if (!apiKeyTest.valid) {
-          // API key test failed - save config but don't mark as configured
-          isConfigured = false;
-          
-          // Save the configuration anyway (so user can edit it), but mark as not configured
-          const nodeConfig = await saveNodeConfiguration(
-            payload.workflowId,
-            payload.nodeId,
-            nodeType,
-            payload.config as NodeConfigurationData,
-            false // Not configured because API key is invalid
-          );
-          
-          // Return error but also return the saved config so UI can update
-          return NextResponse.json(
-            { 
-              nodeConfig,
-              error: apiKeyTest.error || 'API key validation failed',
-              apiKeyInvalid: true,
-            },
-            { status: 400 }
-          );
-        }
+        // Save the configuration anyway (so user can edit it), but mark as not configured
+        const nodeConfig = await saveNodeConfiguration(
+          payload.workflowId,
+          payload.nodeId,
+          nodeType,
+          payload.config as NodeConfigurationData,
+          false // is_configured = false because API key is invalid
+        );
         
-        console.log('[Save Node Config] API key test passed, marking as configured');
-        // API key is valid - mark as configured
-        isConfigured = true;
-      } else {
-        // No API key provided
-        isConfigured = false;
+        console.log('[Save Node Config] Configuration saved with is_configured = false');
+        console.log('[Save Node Config] Saved node config is_configured value:', nodeConfig.is_configured);
+        
+        // Return error but also return the saved config so UI can update
+        return NextResponse.json(
+          { 
+            nodeConfig,
+            error: apiKeyTest.error || 'API key validation failed',
+            apiKeyInvalid: true,
+          },
+          { status: 400 }
+        );
       }
+      
+      // API key test PASSED - node IS configured
+      console.log('[Save Node Config] API key test PASSED - marking is_configured = true');
+      isConfigured = true; // This will be saved to the database
     }
 
-    // Save node configuration
+    // Save node configuration with isConfigured flag
+    console.log(`[Save Node Config] Saving configuration for node ${payload.nodeId} (${nodeType}) with isConfigured = ${isConfigured}`);
+    
     const nodeConfig = await saveNodeConfiguration(
       payload.workflowId,
       payload.nodeId,
       nodeType,
       payload.config as NodeConfigurationData,
-      isConfigured
+      isConfigured // This will be saved to the is_configured column in the database
     );
+
+    // Verify that is_configured was saved correctly
+    console.log(`[Save Node Config] Configuration saved successfully`);
+    console.log(`[Save Node Config] Saved is_configured value in DB: ${nodeConfig.is_configured}`);
+    console.log(`[Save Node Config] Expected is_configured value: ${isConfigured}`);
+    
+    if (nodeConfig.is_configured !== isConfigured) {
+      console.error(`[Save Node Config] WARNING: is_configured mismatch! Expected ${isConfigured}, but got ${nodeConfig.is_configured}`);
+    } else {
+      console.log(`[Save Node Config] ✓ is_configured value matches expected value`);
+    }
 
     return NextResponse.json({ nodeConfig }, { status: 200 });
   } catch (error) {

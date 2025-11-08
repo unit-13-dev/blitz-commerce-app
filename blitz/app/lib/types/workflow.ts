@@ -3,8 +3,7 @@
 export type NodeType = 
   | 'genai-intent' 
   | 'router' 
-  | 'module' 
-  | 'response';
+  | 'module';
 
 export type ModuleType = 
   | 'tracking' 
@@ -45,6 +44,7 @@ export interface GenAIConfig {
   systemPrompt?: string;
   maxTokens?: number;
   apiKey?: string; // Perplexity API key for this business
+  formattingHistoryLimit?: number; // Configurable limit for conversation history in formatting mode (default: 4)
 }
 
 export interface RouterConfig {
@@ -72,10 +72,6 @@ export interface WorkflowNodeWithConfig {
   genAIConfig?: GenAIConfig;
   routerConfig?: RouterConfig;
   moduleConfig?: ModuleConfig;
-  responseConfig?: {
-    responseType?: 'text' | 'structured' | 'ui-component';
-    config?: Record<string, unknown>;
-  };
   isConfigured?: boolean;
 }
 
